@@ -1,0 +1,33 @@
+[package]
+name = "flipperzero-tool"
+version = "0.1.0"
+description = "Flipper Zero File Manager & Reverse Engineering Tool"
+authors = ["giosue"]
+edition = "2024"
+
+[lib]
+name = "flipperzero_tool_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serialport = "4"
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+prost = "0.13"
+protobuf = "3"
+nom = "7"
+log = "0.4"
+env_logger = "0.11"
+notify = "7"
+rfd = "0.15"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
