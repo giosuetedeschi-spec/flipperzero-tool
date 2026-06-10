@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use std::fs;
+use std::path::{Path, PathBuf};
+use super::errors::AppError;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileInfo {
@@ -10,96 +12,289 @@ pub struct FileInfo {
     pub modified: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParsedFile {
     pub file_type: String,
     pub fields: Vec<serde_json::Value>,
     pub raw_preview: String,
 }
 
-// Serial commands
+// ---------------------------------------------------------------------------
+// Local filesystem operations (mock SD card for offline development)
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
-pub fn serial_list_ports() -> Result<Vec<serial::PortInfo>, String> {
-    serial::list_ports()
+pub fn list_directory(path: String) -> Result<Vec<FileInfo>, AppError> {
+    let dir_path = Path::new(&path);
+
+    if !dir_path.exists() {
+        return Err(AppError::NotFound(format!("Directory not found: {}", path)));
+    }
+
+    if !dir_path.is_dir() {
+        return Err(AppError::General(format!("Path is not a directory: {}", path)));
+    }
+
+    let mut entries = Vec::new();
+
+    for entry in fs::read_dir(dir_path).map_err(|e| match e.kind() {
+        std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied(format!("Cannot read directory: {}", path)),
+        _ => AppError::from(e),
+    })? {
+        let entry = entry.map_err(AppError::from)?;
+        let metadata = entry.metadata().map_err(AppError::from)?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        let file_path = entry.path().to_string_lossy().to_string();
+
+        let modified = metadata.modified()
+            .ok()
+            .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs().to_string());
+
+        entries.push(FileInfo {
+            path: file_path,
+            name: file_name,
+            size: metadata.len(),
+            is_dir: metadata.is_dir(),
+            modified,
+        });
+    }
+
+    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
+    Ok(entries)
 }
 
 #[tauri::command]
-pub fn serial_connect(port: String) -> Result<bool, String> {
-    serial::connect(&port)
+pub fn move_file(source: String, dest: String) -> Result<(), AppError> {
+    let src = Path::new(&source);
+    let dst = Path::new(&dest);
+
+    if !src.exists() {
+        return Err(AppError::NotFound(format!("Source not found: {}", source)));
+    }
+
+    if dst.exists() {
+        return Err(AppError::AlreadyExists(format!("Destination already exists: {}", dest)));
+    }
+
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied(format!("Cannot create parent directory: {}", parent.display())),
+            _ => AppError::from(e),
+        })?;
+    }
+
+    fs::rename(src, dst).map_err(|e| match e.kind() {
+        std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied(format!("Cannot move: {}", e)),
+        _ => AppError::from(e),
+    })?;
+
+    Ok(())
 }
 
 #[tauri::command]
-pub fn serial_disconnect() -> Result<bool, String> {
-    serial::disconnect()
+pub fn find_files(path: String, pattern: String) -> Result<Vec<FileInfo>, AppError> {
+    let dir_path = Path::new(&path);
+
+    if !dir_path.exists() {
+        return Err(AppError::NotFound(format!("Path not found: {}", path)));
+    }
+
+    let pattern_lower = pattern.to_lowercase();
+    let mut results = Vec::new();
+
+    fn search_dir(
+        dir: &Path,
+        pattern: &str,
+        results: &mut Vec<FileInfo>,
+    ) -> Result<(), AppError> {
+        for entry in fs::read_dir(dir).map_err(AppError::from)? {
+            let entry = entry.map_err(AppError::from)?;
+            let name = entry.file_name().to_string_lossy().to_string();
+
+            if name.to_lowercase().contains(pattern) {
+                let metadata = entry.metadata().map_err(AppError::from)?;
+                let modified = metadata.modified()
+                    .ok()
+                    .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs().to_string());
+
+                results.push(FileInfo {
+                    path: entry.path().to_string_lossy().to_string(),
+                    name,
+                    size: metadata.len(),
+                    is_dir: metadata.is_dir(),
+                    modified,
+                });
+            }
+
+            if entry.file_type().map_err(AppError::from)?.is_dir() {
+                search_dir(&entry.path(), pattern, results)?;
+            }
+        }
+        Ok(())
+    }
+
+    search_dir(dir_path, &pattern_lower, &mut results)?;
+    Ok(results)
 }
 
 #[tauri::command]
-pub fn serial_read_file(path: String) -> Result<Vec<u8>, String> {
-    serial::read_file(&path)
+pub fn create_file_from_template(path: String, ext: String) -> Result<String, AppError> {
+    let file_path = PathBuf::from(format!("{}.{}", path, ext));
+
+    if file_path.exists() {
+        return Err(AppError::AlreadyExists(format!(
+            "File already exists: {}",
+            file_path.display()
+        )));
+    }
+
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied => {
+                AppError::PermissionDenied(format!("Cannot create directory: {}", parent.display()))
+            }
+            _ => AppError::from(e),
+        })?;
+    }
+
+    fs::write(&file_path, "").map_err(|e| match e.kind() {
+        std::io::ErrorKind::PermissionDenied => {
+            AppError::PermissionDenied(format!("Cannot create file: {}", file_path.display()))
+        }
+        _ => AppError::from(e),
+    })?;
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Serial commands (async via tokio — no UI blocking)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn serial_list_ports() -> Result<Vec<super::serial::PortInfo>, AppError> {
+    super::serial::list_ports()
 }
 
 #[tauri::command]
-pub fn serial_write_file(path: String, data: Vec<u8>) -> Result<bool, String> {
-    serial::write_file(&path, &data)
+pub async fn serial_connect(port: String) -> Result<bool, AppError> {
+    super::serial::connect(&port)
 }
 
 #[tauri::command]
-pub fn serial_list_dir(path: String) -> Result<Vec<FileInfo>, String> {
-    serial::list_dir(&path)
+pub async fn serial_disconnect() -> Result<bool, AppError> {
+    super::serial::disconnect()
 }
 
+#[tauri::command]
+pub async fn serial_read_file(path: String) -> Result<String, AppError> {
+    super::serial::read_file_text(&path)
+}
+
+#[tauri::command]
+pub async fn serial_write_file(path: String, data: String) -> Result<bool, AppError> {
+    super::serial::write_file_text(&path, &data)
+}
+
+#[tauri::command]
+pub async fn serial_list_dir(path: String) -> Result<Vec<FileInfo>, AppError> {
+    super::serial::list_dir(&path)
+}
+
+#[tauri::command]
+pub fn serial_is_connected() -> bool {
+    super::serial::is_connected()
+}
+
+#[tauri::command]
+pub async fn local_read_file(path: String) -> Result<String, AppError> {
+    let bytes = fs::read(&path)
+        .map_err(|e| AppError::from(e))?;
+    String::from_utf8(bytes)
+        .map_err(|e| AppError::ParseError(format!("File is not valid UTF-8: {}", e)))
+}
+
+#[tauri::command]
+pub async fn local_write_file(path: String, data: String) -> Result<bool, AppError> {
+    // Safe save: write to temp file first, then rename
+    let path_obj = Path::new(&path);
+    let temp_path = path_obj.with_extension("tmp");
+
+    fs::write(&temp_path, data.as_bytes())
+        .map_err(|e| AppError::from(e))?;
+
+    fs::rename(&temp_path, path_obj)
+        .map_err(|e| AppError::from(e))?;
+
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
 // VFS commands
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
-pub fn fs_index_device() -> Result<bool, String> {
-    vfs::reindex()
+pub fn fs_index_device() -> Result<bool, AppError> {
+    super::vfs::reindex()
 }
 
 #[tauri::command]
-pub fn fs_get_cached_tree() -> Result<Vec<FileInfo>, String> {
-    vfs::get_tree()
+pub fn fs_get_cached_tree() -> Result<Vec<FileInfo>, AppError> {
+    super::vfs::get_tree()
 }
 
+// ---------------------------------------------------------------------------
 // Parser commands
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
-pub fn parser_parse_sub(data: String) -> Result<ParsedFile, String> {
-    parsers::parse_sub(&data)
+pub fn parser_parse_sub(data: String) -> Result<ParsedFile, AppError> {
+    super::parsers::parse_sub(&data).map_err(|e| AppError::ParseError(e))
 }
 
 #[tauri::command]
-pub fn parser_parse_ir(data: String) -> Result<ParsedFile, String> {
-    parsers::parse_ir(&data)
+pub fn parser_parse_ir(data: String) -> Result<ParsedFile, AppError> {
+    super::parsers::parse_ir(&data).map_err(|e| AppError::ParseError(e))
 }
 
 #[tauri::command]
-pub fn parser_parse_nfc(data: String) -> Result<ParsedFile, String> {
-    parsers::parse_nfc(&data)
+pub fn parser_parse_nfc(data: String) -> Result<ParsedFile, AppError> {
+    super::parsers::parse_nfc(&data).map_err(|e| AppError::ParseError(e))
 }
 
+// ---------------------------------------------------------------------------
 // uFBT commands
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
-pub fn ufbt_new_project(name: String, path: String) -> Result<String, String> {
-    std::process::Command::new("ufbt")
+pub fn ufbt_new_project(name: String, path: String) -> Result<String, AppError> {
+    let output = std::process::Command::new("ufbt")
         .args(["create", "app", "--name", &name])
         .current_dir(&path)
         .output()
-        .map_err(|e| format!("ufbt not found: {}", e))?;
+        .map_err(|e| AppError::General(format!("ufbt not found: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(AppError::General(format!("ufbt failed: {}", stderr)));
+    }
+
     Ok(format!("Created plugin: {}", name))
 }
 
 #[tauri::command]
-pub fn ufbt_compile() -> Result<String, String> {
+pub fn ufbt_compile() -> Result<String, AppError> {
     let output = std::process::Command::new("ufbt")
         .arg("build")
         .output()
-        .map_err(|e| format!("ufbt build failed: {}", e))?;
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
+        .map_err(|e| AppError::General(format!("ufbt build failed: {}", e)))?;
 
-#[tauri::command]
-pub fn ufbt_launch() -> Result<String, String> {
-    let output = std::process::Command::new("ufbt")
-        .arg("launch")
-        .output()
-        .map_err(|e| format!("ufbt launch failed: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(AppError::General(format!("ufbt build failed: {}", stderr)));
+    }
+
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
