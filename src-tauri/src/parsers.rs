@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
 
+use super::errors::AppError;
+
 use super::commands::ParsedFile;
 
 fn parse_key_value(raw: &str) -> Vec<Value> {
@@ -19,7 +21,7 @@ fn parse_key_value(raw: &str) -> Vec<Value> {
         .collect()
 }
 
-pub fn parse_sub(raw: &str) -> Result<ParsedFile, String> {
+pub fn parse_sub(raw: &str) -> Result<ParsedFile, AppError> {
     let fields = parse_key_value(raw);
     Ok(ParsedFile {
         file_type: "subghz".to_string(),
@@ -28,7 +30,7 @@ pub fn parse_sub(raw: &str) -> Result<ParsedFile, String> {
     })
 }
 
-pub fn parse_ir(raw: &str) -> Result<ParsedFile, String> {
+pub fn parse_ir(raw: &str) -> Result<ParsedFile, AppError> {
     let fields = parse_key_value(raw);
     Ok(ParsedFile {
         file_type: "infrared".to_string(),
@@ -37,7 +39,7 @@ pub fn parse_ir(raw: &str) -> Result<ParsedFile, String> {
     })
 }
 
-pub fn parse_nfc(raw: &str) -> Result<ParsedFile, String> {
+pub fn parse_nfc(raw: &str) -> Result<ParsedFile, AppError> {
     let fields = parse_key_value(raw);
     Ok(ParsedFile {
         file_type: "nfc".to_string(),

@@ -15,7 +15,8 @@ import {
   type PortInfo,
 } from "./services/tauri";
 
-const MOCK_ROOT = "C:/Cose Nuove/Code/flipperzero-tool/.flipper_mock";
+// Root path: initialized from Tauri command or user-selected folder
+const DEFAULT_ROOT = "";
 
 // File types that support text editing
 const EDITABLE_EXTENSIONS = new Set(["txt", "sub", "ir", "nfc", "json", "conf", "cfg", "ini"]);
@@ -66,7 +67,7 @@ export default function App() {
   const [serialError, setSerialError] = useState<string | null>(null);
 
   // --- File browser state ---
-  const [currentPath, setCurrentPath] = useState(MOCK_ROOT);
+  const [currentPath, setCurrentPath] = useState(DEFAULT_ROOT);
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +170,11 @@ export default function App() {
       // ignore
     }
     setSerialConnected(false);
-    setCurrentPath(MOCK_ROOT);
+    // Reset to default root — triggers folder picker if no stored preference
+    setCurrentPath(DEFAULT_ROOT);
+    // Load saved preference from localStorage
+    const saved = localStorage.getItem("flipper_root_path");
+    if (saved) setCurrentPath(saved);
     setSelectedFile(null);
     setEditContent("");
     setOriginalContent("");

@@ -251,17 +251,17 @@ pub fn fs_get_cached_tree() -> Result<Vec<FileInfo>, AppError> {
 
 #[tauri::command]
 pub fn parser_parse_sub(data: String) -> Result<ParsedFile, AppError> {
-    super::parsers::parse_sub(&data).map_err(|e| AppError::ParseError(e))
+    super::parsers::parse_sub(&data)
 }
 
 #[tauri::command]
 pub fn parser_parse_ir(data: String) -> Result<ParsedFile, AppError> {
-    super::parsers::parse_ir(&data).map_err(|e| AppError::ParseError(e))
+    super::parsers::parse_ir(&data)
 }
 
 #[tauri::command]
 pub fn parser_parse_nfc(data: String) -> Result<ParsedFile, AppError> {
-    super::parsers::parse_nfc(&data).map_err(|e| AppError::ParseError(e))
+    super::parsers::parse_nfc(&data)
 }
 
 // ---------------------------------------------------------------------------
