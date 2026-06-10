@@ -298,3 +298,110 @@ pub fn ufbt_compile() -> Result<String, AppError> {
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
+
+// ---------------------------------------------------------------------------
+// Additional CRUD commands (FASE 1)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn rename_file(path: String, new_name: String) -> Result<String, AppError> {
+    let src = Path::new(&path);
+    if !src.exists() {
+        return Err(AppError::NotFound(format!("File not found: {}", path)));
+    }
+    let parent = src.parent().ok_or_else(|| {
+        AppError::General("Cannot determine parent directory".to_string())
+    })?;
+    let new_path = parent.join(new_name);
+    if new_path.exists() {
+        return Err(AppError::AlreadyExists(format!(
+            "File already exists: {}",
+            new_path.display()
+        )));
+    }
+    fs::rename(src, &new_path).map_err(AppError::from)?;
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn delete_file(path: String) -> Result<(), AppError> {
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Err(AppError::NotFound(format!("File not found: {}", path)));
+    }
+    if p.is_dir() {
+        fs::remove_dir_all(p).map_err(AppError::from)?;
+    } else {
+        fs::remove_file(p).map_err(AppError::from)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn copy_file(source: String, dest: String) -> Result<(), AppError> {
+    let src = Path::new(&source);
+    if !src.exists() {
+        return Err(AppError::NotFound(format!("Source not found: {}", source)));
+    }
+    let dst = Path::new(&dest);
+    if dst.exists() {
+        return Err(AppError::AlreadyExists(format!("Destination exists: {}", dest)));
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(AppError::from)?;
+    }
+    if src.is_dir() {
+        // Simple recursive copy
+        copy_dir_all(src, dst).map_err(AppError::from)?;
+    } else {
+        fs::copy(src, dst).map_err(AppError::from)?;
+    }
+    Ok(())
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let dest_path = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_all(&entry.path(), &dest_path)?;
+        } else {
+            fs::copy(&entry.path(), &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_file_content(path: String) -> Result<String, AppError> {
+    let bytes = fs::read(&path).map_err(AppError::from)?;
+    String::from_utf8(bytes)
+        .map_err(|e| AppError::ParseError(format!("Not valid UTF-8: {}", e)))
+}
+
+#[tauri::command]
+pub fn write_file_content(path: String, content: String) -> Result<(), AppError> {
+    let path_obj = Path::new(&path);
+    // Safe save: write to temp then rename
+    let temp = path_obj.with_extension("tmp");
+    fs::write(&temp, content.as_bytes()).map_err(AppError::from)?;
+    fs::rename(&temp, path_obj).map_err(AppError::from)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_app_paths() -> Result<serde_json::Value, AppError> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| AppError::General("Cannot find home directory".into()))?;
+    let desktop = dirs::desktop_dir()
+        .ok_or_else(|| AppError::General("No desktop directory".into()))?;
+    let documents = dirs::document_dir()
+        .ok_or_else(|| AppError::General("No documents directory".into()))?;
+    Ok(serde_json::json!({
+        "home": home.to_string_lossy(),
+        "desktop": desktop.to_string_lossy(),
+        "documents": documents.to_string_lossy(),
+    }))
+}
