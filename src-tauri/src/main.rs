@@ -12,6 +12,7 @@ fn main() {
     env_logger::init();
 
     tauri::Builder::default()
+        .manage(super::serial::new_state())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             // Local filesystem

@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod commands;
 pub mod serial;
+pub mod ufbt;
 pub mod vfs;
 pub mod parsers;
 

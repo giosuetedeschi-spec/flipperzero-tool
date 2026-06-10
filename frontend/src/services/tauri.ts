@@ -145,3 +145,32 @@ export async function serialIsConnected(): Promise<boolean> {
   try { return await invoke<boolean>("serial_is_connected"); }
   catch { return false; }
 }
+
+// uFBT commands (FASE 4)
+export async function ufbt_is_installed(): Promise<boolean> {
+  try { return await invoke<boolean>("ufbt_is_installed"); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_get_version(): Promise<string> {
+  try { return await invoke<string>("ufbt_get_version"); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_get_sdk_version(): Promise<string> {
+  try { return await invoke<string>("ufbt_get_sdk_version"); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_install(): Promise<string> {
+  try { return await invoke<string>("ufbt_install"); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_update(): Promise<string> {
+  try { return await invoke<string>("ufbt_update"); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_create(name: string, path: string): Promise<string> {
+  try { return await invoke<string>("ufbt_create", { name, path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_build(path: string): Promise<string> {
+  try { return await invoke<string>("ufbt_build", { path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_deploy(path: string): Promise<string> {
+  try { return await invoke<string>("ufbt_deploy", { path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+}
+export async function ufbt_clean(path: string): Promise<string> {
+  try { return await invoke<string>("ufbt_clean", { path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+}

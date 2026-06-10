@@ -173,33 +173,50 @@ pub async fn serial_list_ports() -> Result<Vec<super::serial::PortInfo>, AppErro
 }
 
 #[tauri::command]
-pub async fn serial_connect(port: String) -> Result<bool, AppError> {
-    super::serial::connect(&port)
+pub async fn serial_connect(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    port: String,
+) -> Result<bool, AppError> {
+    super::serial::connect(&state, &port)
 }
 
 #[tauri::command]
-pub async fn serial_disconnect() -> Result<bool, AppError> {
-    super::serial::disconnect()
+pub async fn serial_disconnect(
+    state: tauri::State<'_, super::serial::FlipperState>,
+) -> Result<bool, AppError> {
+    super::serial::disconnect(&state)
 }
 
 #[tauri::command]
-pub async fn serial_read_file(path: String) -> Result<String, AppError> {
-    super::serial::read_file_text(&path)
+pub async fn serial_read_file(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    path: String,
+) -> Result<String, AppError> {
+    super::serial::read_file_text(&state, &path)
 }
 
 #[tauri::command]
-pub async fn serial_write_file(path: String, data: String) -> Result<bool, AppError> {
-    super::serial::write_file_text(&path, &data)
+pub async fn serial_write_file(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    path: String,
+    data: String,
+) -> Result<bool, AppError> {
+    super::serial::write_file_text(&state, &path, &data)
 }
 
 #[tauri::command]
-pub async fn serial_list_dir(path: String) -> Result<Vec<FileInfo>, AppError> {
-    super::serial::list_dir(&path)
+pub async fn serial_list_dir(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    path: String,
+) -> Result<Vec<FileInfo>, AppError> {
+    super::serial::list_dir(&state, &path)
 }
 
 #[tauri::command]
-pub fn serial_is_connected() -> bool {
-    super::serial::is_connected()
+pub fn serial_is_connected(
+    state: tauri::State<'_, super::serial::FlipperState>,
+) -> bool {
+    super::serial::is_connected(&state)
 }
 
 #[tauri::command]
@@ -403,4 +420,53 @@ pub fn get_app_paths() -> Result<serde_json::Value, AppError> {
         "desktop": desktop.to_string_lossy(),
         "documents": documents.to_string_lossy(),
     }))
+}
+
+// ---------------------------------------------------------------------------
+// uFBT commands (FASE 4)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn ufbt_is_installed() -> bool {
+    super::ufbt::is_ufbt_installed()
+}
+
+#[tauri::command]
+pub fn ufbt_get_version() -> Result<String, AppError> {
+    super::ufbt::get_ufbt_version()
+}
+
+#[tauri::command]
+pub fn ufbt_get_sdk_version() -> Result<String, AppError> {
+    super::ufbt::get_sdk_version()
+}
+
+#[tauri::command]
+pub fn ufbt_install() -> Result<String, AppError> {
+    super::ufbt::ufbt_install()
+}
+
+#[tauri::command]
+pub fn ufbt_update() -> Result<String, AppError> {
+    super::ufbt::ufbt_update()
+}
+
+#[tauri::command]
+pub fn ufbt_create(name: String, path: String) -> Result<String, AppError> {
+    super::ufbt::create_fap_project(&name, &path)
+}
+
+#[tauri::command]
+pub fn ufbt_build(path: String) -> Result<String, AppError> {
+    super::ufbt::build_fap(&path)
+}
+
+#[tauri::command]
+pub fn ufbt_deploy(path: String) -> Result<String, AppError> {
+    super::ufbt::deploy_fap(&path)
+}
+
+#[tauri::command]
+pub fn ufbt_clean(path: String) -> Result<String, AppError> {
+    super::ufbt::clean_fap(&path)
 }
