@@ -264,6 +264,11 @@ pub fn parser_parse_nfc(data: String) -> Result<ParsedFile, AppError> {
     super::parsers::parse_nfc(&data)
 }
 
+#[tauri::command]
+pub fn open_in_system(path: String) -> Result<(), AppError> {
+    open::that(&path).map_err(|e| AppError::General(format!("Cannot open: {}", e)))
+}
+
 // ---------------------------------------------------------------------------
 // uFBT commands
 // ---------------------------------------------------------------------------

@@ -22,9 +22,11 @@ interface Props {
   selectedPath: string | null;
   onSelect: (file: FileInfo) => void;
   onOpen: (file: FileInfo) => void;
+  onDragStart?: (file: FileInfo, e: React.DragEvent) => void;
+  onDropOnDir?: (dir: FileInfo, e: React.DragEvent) => void;
 }
 
-export default function FileTable({ files, selectedPath, onSelect, onOpen }: Props) {
+export default function FileTable({ files, selectedPath, onSelect, onOpen, onDragStart, onDropOnDir }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -67,6 +69,10 @@ export default function FileTable({ files, selectedPath, onSelect, onOpen }: Pro
         {sorted.map((file) => (
           <tr
             key={file.path}
+            draggable
+            onDragStart={(e) => onDragStart?.(file, e)}
+            onDragOver={(e) => { e.preventDefault(); if (file.is_dir) e.dataTransfer.dropEffect = "move"; }}
+            onDrop={(e) => { if (file.is_dir) onDropOnDir?.(file, e); }}
             onClick={() => onSelect(file)}
             onDoubleClick={() => onOpen(file)}
             className={

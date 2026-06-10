@@ -7,6 +7,7 @@ import EditorPanel from "./components/EditorPanel";
 import NewFileModal from "./components/NewFileModal";
 import SerialPanel from "./components/SerialPanel";
 import { ToastContainer, showToast } from "./components/ui/Toast";
+import FilePreview from "./components/FilePreview";
 
 type ViewMode = "local" | "serial";
 
@@ -227,6 +228,15 @@ export default function App() {
             />
           )}
         </div>
+
+        {/* Preview panel */}
+        {editor.selectedFile && isEditable(editor.selectedFile.name) && (
+          <FilePreview
+            file={editor.selectedFile}
+            content={editor.content}
+            onClose={() => {}}
+          />
+        )}
 
         {/* Editor panel */}
         <EditorPanel
