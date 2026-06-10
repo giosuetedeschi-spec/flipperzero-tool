@@ -1,0 +1,48 @@
+// Flipper Zero Protobuf protocol definitions
+// https://github.com/flipperdevices/flipperzero-protobuf
+syntax = "proto3";
+
+package flipper;
+
+message RpcMessage {
+    uint32 sequence_id = 1;
+    oneof content {
+        StorageListRequest storage_list = 10;
+        StorageListResponse storage_list_response = 11;
+        StorageReadRequest storage_read = 12;
+        StorageReadResponse storage_read_response = 13;
+        StorageWriteRequest storage_write = 14;
+        StorageWriteResponse storage_write_response = 15;
+        StorageDeleteRequest storage_delete = 16;
+        StorageDeleteResponse storage_delete_response = 17;
+        StorageMkdirRequest storage_mkdir = 18;
+        StorageMkdirResponse storage_mkdir_response = 19;
+        DeviceInfoRequest device_info = 20;
+        DeviceInfoResponse device_info_response = 21;
+        PingRequest ping = 22;
+        PingResponse ping_response = 23;
+        StopSession stop_session = 28;
+    }
+}
+
+message FileInfo {
+    string name = 1;
+    uint32 size = 2;
+    bool is_dir = 3;
+}
+
+message StorageListRequest { string path = 1; }
+message StorageListResponse { repeated FileInfo files = 1; }
+message StorageReadRequest { string path = 1; }
+message StorageReadResponse { bytes data = 1; }
+message StorageWriteRequest { string path = 1; bytes data = 2; }
+message StorageWriteResponse { bool success = 1; }
+message StorageDeleteRequest { string path = 1; bool recursive = 2; }
+message StorageDeleteResponse { bool success = 1; }
+message StorageMkdirRequest { string path = 1; }
+message StorageMkdirResponse { bool success = 1; }
+message DeviceInfoRequest {}
+message DeviceInfoResponse { string firmware_version = 1; string protobuf_version = 2; }
+message PingRequest { bytes data = 1; }
+message PingResponse { bytes data = 1; }
+message StopSession {}
