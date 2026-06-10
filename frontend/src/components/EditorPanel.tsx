@@ -1,5 +1,7 @@
 import { type FileInfo } from "../services/tauri";
 import { isEditable, formatSize } from "../hooks/useEditor";
+import CodeMirrorEditor from "./editor/CodeMirrorEditor";
+import { useState } from "react";
 
 interface Props {
   file: FileInfo | null;
@@ -14,10 +16,18 @@ interface Props {
   onClose: () => void;
 }
 
+function getLanguage(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  if (ext === "json") return "json";
+  if (ext === "js" || ext === "ts") return "javascript";
+  return "";
+}
+
 export default function EditorPanel({ file, content, original, loading, saving, error, viewMode, onContentChange, onSave, onClose }: Props) {
   if (!file) return null;
   const editable = isEditable(file.name);
   const dirty = content !== original;
+  const lang = getLanguage(file.name);
 
   if (!editable) {
     return (
@@ -36,44 +46,46 @@ export default function EditorPanel({ file, content, original, loading, saving, 
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-bold text-gray-300 truncate">{file.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-300 truncate">{file.name}</h3>
+            {dirty && <span className="text-xs text-amber-400" title="Unsaved">●</span>}
+          </div>
           <p className="text-xs text-gray-500 font-mono truncate">{file.path}</p>
         </div>
-        <div className="flex items-center gap-2 ml-2">
-          {dirty && <span className="text-xs text-amber-400" title="Unsaved">●</span>}
+        <div className="flex items-center gap-2">
           {saving && <span className="text-xs text-gray-400 animate-pulse">Saving...</span>}
           <button
             onClick={onSave}
             disabled={!dirty || saving || loading}
             className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded text-sm font-medium transition"
           >
-            💾 Save
+            Save
           </button>
         </div>
       </div>
 
       {error && (
         <div className="bg-red-900/60 border-b border-red-800 px-3 py-2 text-xs text-red-300">
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
+      {/* Editor body */}
       <div className="flex-1 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             <span className="animate-spin mr-2">⏳</span> Loading...
           </div>
         ) : (
-          <textarea
+          <CodeMirrorEditor
             value={content}
-            onChange={(e) => onContentChange(e.target.value)}
-            className="w-full h-full bg-gray-900 text-gray-100 font-mono text-sm p-4 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-600/50 border-none"
-            spellCheck={false}
-            placeholder="File content..."
+            onChange={onContentChange}
+            language={lang}
           />
         )}
       </div>
 
+      {/* Status bar */}
       <div className="px-4 py-2 border-t border-gray-700 text-xs text-gray-500 flex justify-between">
         <span>{content.length} chars</span>
         <span>{content.split("\n").length} lines</span>
