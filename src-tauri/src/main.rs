@@ -7,7 +7,6 @@ mod serial;
 mod vfs;
 mod parsers;
 
-use tauri::Manager;
 
 fn main() {
     env_logger::init();

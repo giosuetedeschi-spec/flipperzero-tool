@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use super::errors::AppError;
 
 /// A parsed Flipper file with typed fields.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ParsedFile {
     pub file_type: String,
     pub fields: Vec<Value>,
@@ -152,7 +152,7 @@ pub fn parse_ir(raw: &str) -> Result<ParsedFile, AppError> {
     let mut current_btn = String::new();
     let mut btn_protocol = String::new();
     let mut btn_address = String::new();
-    let mut btn_command = String::new();
+    let btn_command = String::new();
     let mut raw_data = false;
 
     for (k, v) in &kvs {
@@ -174,7 +174,7 @@ pub fn parse_ir(raw: &str) -> Result<ParsedFile, AppError> {
                 btn_address = v.clone();
             }
             k if k.contains("Command") && k != "Command" => {
-                btn_command = v.clone();
+                let _btn_command = v.clone();
                 if !current_btn.is_empty() {
                     buttons.push(json!({
                         "name": current_btn,

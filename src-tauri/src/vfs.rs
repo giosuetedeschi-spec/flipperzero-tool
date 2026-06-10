@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use std::path::PathBuf;
 use super::errors::AppError;
 use super::commands::FileInfo;

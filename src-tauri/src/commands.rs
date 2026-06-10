@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use super::errors::AppError;
+use super::parsers::ParsedFile;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileInfo {
@@ -10,13 +11,6 @@ pub struct FileInfo {
     pub size: u64,
     pub is_dir: bool,
     pub modified: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ParsedFile {
-    pub file_type: String,
-    pub fields: Vec<serde_json::Value>,
-    pub raw_preview: String,
 }
 
 // ---------------------------------------------------------------------------
