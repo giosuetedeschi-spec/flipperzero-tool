@@ -560,3 +560,109 @@ pub fn ufbt_deploy(path: String) -> Result<String, AppError> {
 pub fn ufbt_clean(path: String) -> Result<String, AppError> {
     super::ufbt::clean_fap(&path)
 }
+
+// ---------------------------------------------------------------------------
+// Structured parser commands (P3)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn parser_parse_sub_struct(data: String) -> Result<super::parsers::SubGhzFile, AppError> {
+    super::parsers::ParsedFile::parse_sub_struct(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_ir_struct(data: String) -> Result<super::parsers::IrFile, AppError> {
+    super::parsers::ParsedFile::parse_ir_struct(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_nfc_struct(data: String) -> Result<super::parsers::NfcFile, AppError> {
+    super::parsers::ParsedFile::parse_nfc_struct(&data)
+}
+
+// ---------------------------------------------------------------------------
+// Template file creation (P3)
+// ---------------------------------------------------------------------------
+
+use std::collections::HashMap;
+
+lazy_static::lazy_static! {
+    static ref TEMPLATES: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // SubGHz template
+        m.insert("sub", "Filetype: Flipper SubGhz Key File
+Version: 1
+Frequency: 433920000
+Preset: FuriHalSubGhzPresetOok650Async
+Protocol: Princeton
+Bit: 24
+Key: 00 00 00 00 00 00
+");
+        // IR template
+        m.insert("ir", "Filetype: IR
+Version: 1
+Protocol: NEC
+Address: 0x00
+Command: 0x00
+");
+        // NFC template
+        m.insert("nfc", "Filetype: Flipper NFC Key
+Version: 1
+Device Type: Mifare Classic
+UID: 00:00:00:00
+ATQA: 00 00
+SAK: 00
+");
+        // BadUSB template
+        m.insert("txt", "REM Flipper Zero BadUSB Script
+REM Delay 1000
+STRING Hello World
+ENTER
+");
+        m
+    };
+}
+
+#[tauri::command]
+pub fn template_get(ext: String) -> Result<String, AppError> {
+    TEMPLATES
+        .get(ext.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::General(format!("No template for extension: {}", ext)))
+}
+
+#[tauri::command]
+pub fn template_list() -> Vec<String> {
+    TEMPLATES.keys().map(|k| k.to_string()).collect()
+}
+
+#[tauri::command]
+pub fn template_create(base_path: String, name: String, ext: String) -> Result<String, AppError> {
+    let tpl = TEMPLATES
+        .get(ext.as_str())
+        .ok_or_else(|| AppError::General(format!("No template for extension: {}", ext)))?;
+
+    let file_path = PathBuf::from(format!("{}/{}.{}", base_path, name, ext));
+
+    if file_path.exists() {
+        return Err(AppError::AlreadyExists(format!("File already exists: {}", file_path.display())));
+    }
+
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied => {
+                AppError::PermissionDenied(format!("Cannot create directory: {}", parent.display()))
+            }
+            _ => AppError::from(e),
+        })?;
+    }
+
+    std::fs::write(&file_path, tpl.as_bytes()).map_err(|e| match e.kind() {
+        std::io::ErrorKind::PermissionDenied => {
+            AppError::PermissionDenied(format!("Cannot create file: {}", file_path.display()))
+        }
+        _ => AppError::from(e),
+    })?;
+
+    Ok(file_path.to_string_lossy().to_string())
+}

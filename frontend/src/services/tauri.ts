@@ -231,3 +231,85 @@ export interface TransferProgress {
   totalBytes: number;
   fileName: string;
 }
+
+// ---------------------------------------------------------------------------
+// Structured parser commands (P3)
+// ---------------------------------------------------------------------------
+
+export async function parserParseSubStruct(data: string): Promise<any> {
+  return invoke<any>("parser_parse_sub_struct", { data });
+}
+
+export async function parserParseIrStruct(data: string): Promise<any> {
+  return invoke<any>("parser_parse_ir_struct", { data });
+}
+
+export async function parserParseNfcStruct(data: string): Promise<any> {
+  return invoke<any>("parser_parse_nfc_struct", { data });
+}
+
+// ---------------------------------------------------------------------------
+// Template commands (P3)
+// ---------------------------------------------------------------------------
+
+export async function templateGet(ext: string): Promise<string> {
+  return invoke<string>("template_get", { ext });
+}
+
+export async function templateList(): Promise<string[]> {
+  return invoke<string[]>("template_list");
+}
+
+export async function templateCreate(basePath: string, name: string, ext: string): Promise<string> {
+  return invoke<string>("template_create", { basePath, name, ext });
+}
+
+
+// ---------------------------------------------------------------------------
+// Reverse Engineer
+// ---------------------------------------------------------------------------
+
+export interface PatternMatch {
+  offset: number;
+  length: number;
+  pattern: number[];
+  confidence: number;
+  description: string;
+}
+
+export interface ProtocolFingerprint {
+  name: string;
+  signature: number[];
+  offset: number;
+  description: string;
+}
+
+export interface FieldCandidate {
+  offset: number;
+  length: number;
+  field_type: string;
+  confidence: number;
+  value_hex: string;
+  value_dec: number | null;
+}
+
+export interface AnalysisResult {
+  entropy: number;
+  total_bytes: number;
+  unique_bytes: number;
+  patterns: PatternMatch[];
+  matched_protocols: ProtocolFingerprint[];
+  inferred_structure: FieldCandidate[];
+  hex_preview: string;
+  ascii_preview: string;
+}
+
+export async function reverseEngineerAnalyze(hexData: string): Promise<AnalysisResult> {
+  try { return await invoke<AnalysisResult>("reverse_engineer_analyze", { hexData }); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+}
+
+export async function reverseEngineerAnalyzeFile(path: string): Promise<AnalysisResult> {
+  try { return await invoke<AnalysisResult>("reverse_engineer_analyze_file", { path }); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+}

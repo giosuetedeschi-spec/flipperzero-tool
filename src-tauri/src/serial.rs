@@ -237,6 +237,7 @@ pub struct FlipperConnection {
     pub port_name: String,
     pub baud_rate: u32,
     pub connected: bool,
+    next_seq: u32,
 }
 
 impl FlipperConnection {
@@ -348,5 +349,82 @@ pub fn autodetect_connect(state: &FlipperState) -> Result<bool, AppError> {
         None => Err(AppError::SerialError(
             "Flipper Zero not found (VID:PID 0483:5740)".to_string(),
         )),
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Sequence management for RPC
+// ---------------------------------------------------------------------------
+
+impl FlipperConnection {
+    pub fn next_sequence(&mut self) -> u32 {
+        self.next_seq += 1;
+        if self.next_seq == 0 { self.next_seq = 1; }
+        self.next_seq
+    }
+
+    pub fn current_sequence(&self) -> u32 {
+        self.next_seq
+    }
+
+    /// Write an RPC message with varint length prefix.
+    pub fn write_rpc(&mut self, data: &[u8]) -> Result<(), AppError> {
+        if !self.connected {
+            return Err(AppError::SerialError("Not connected".to_string()));
+        }
+
+        // Encode length as varint
+        let mut frame = encode_varint(data.len() as u64);
+        frame.extend_from_slice(data);
+
+        // Write to serial port
+        self.port.as_mut().map(|p| {
+            p.write_all(&frame).map_err(|e| AppError::SerialError(format!("Write error: {}", e)))
+        }).unwrap_or(Err(AppError::SerialError("No port".to_string())))?;
+
+        Ok(())
+    }
+
+    /// Read an RPC message (varint length prefix + data).
+    pub fn read_rpc(&mut self, timeout_ms: u64) -> Result<Vec<u8>, AppError> {
+        if !self.connected {
+            return Err(AppError::SerialError("Not connected".to_string()));
+        }
+
+        let port = self.port.as_mut()
+            .ok_or_else(|| AppError::SerialError("No port".to_string()))?;
+
+        // Read varint length
+        let mut len_buf = Vec::new();
+        let mut byte = [0u8; 1];
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+
+        loop {
+            if std::time::Instant::now() > deadline {
+                return Err(AppError::SerialError("RPC read timeout".to_string()));
+            }
+            match port.read(&mut byte) {
+                Ok(0) => continue,
+                Ok(_) => {
+                    len_buf.push(byte[0]);
+                    if byte[0] & 0x80 == 0 {
+                        break;
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => continue,
+                Err(e) => return Err(AppError::SerialError(format!("Read error: {}", e))),
+            }
+        }
+
+        let (length, _) = decode_varint(&len_buf)
+            .map_err(|e| AppError::SerialError(format!("Varint decode: {}", e)))?;
+
+        // Read payload
+        let mut payload = vec![0u8; length as usize];
+        port.read_exact(&mut payload)
+            .map_err(|e| AppError::SerialError(format!("Payload read: {}", e)))?;
+
+        Ok(payload)
     }
 }

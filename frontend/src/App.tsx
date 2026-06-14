@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { listDirectory, serialListPorts, serialConnect, serialDisconnect, serialIsConnected, createFileFromTemplate, type FileInfo, type PortInfo } from "./services/tauri";
+import { listDirectory, serialListPorts, serialConnect, serialDisconnect, serialIsConnected, createFileFromTemplate, moveFile, type FileInfo, type PortInfo } from "./services/tauri";
 import { useDirectory } from "./hooks/useDirectory";
 import { useEditor } from "./hooks/useEditor";
+import { useDragDrop } from "./hooks/useDragDrop";
 import FileTable from "./components/FileTable";
 import EditorPanel from "./components/EditorPanel";
 import NewFileModal from "./components/NewFileModal";
-import SerialPanel from "./components/SerialPanel";
+import DevicePanel from "./components/DevicePanel";
 import { ToastContainer, showToast } from "./components/ui/Toast";
 import FilePreview from "./components/FilePreview";
+import ReverseEngineerPanel from "./components/ReverseEngineerPanel";
 
 type ViewMode = "local" | "serial";
 
@@ -23,10 +25,21 @@ export default function App() {
 
   // --- New file modal ---
   const [showNewFile, setShowNewFile] = useState(false);
+  const [showReverseEngineer, setShowReverseEngineer] = useState(false);
 
   // --- Custom hooks ---
   const dir = useDirectory(viewMode, serialConnected);
   const editor = useEditor(viewMode);
+  const dnd = useDragDrop(async (file: FileInfo, targetPath: string) => {
+    try {
+      const dest = targetPath + "/" + file.name;
+      await moveFile(file.path, dest);
+      dir.refresh();
+      showToast(`Moved ${file.name} → ${targetPath}`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  });
 
   // --- Serial port discovery ---
   const refreshPorts = useCallback(async () => {
@@ -141,17 +154,9 @@ export default function App() {
 
         {/* Serial controls */}
         {viewMode === "serial" && (
-          <SerialPanel
-            ports={ports}
-            selectedPort={selectedPort}
-            connected={serialConnected}
-            error={serialError}
-            onSelectPort={setSelectedPort}
-            onRefresh={refreshPorts}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onCloseError={() => setSerialError(null)}
-          />
+          <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col p-3 gap-3">
+            <DevicePanel onConnectionChange={setSerialConnected} />
+          </div>
         )}
 
         {/* Breadcrumb / Path bar */}
@@ -181,6 +186,12 @@ export default function App() {
           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-medium"
         >
           + New
+        </button>
+        <button
+          onClick={() => setShowReverseEngineer(!showReverseEngineer)}
+          className={`px-3 py-1 rounded text-sm font-medium ${showReverseEngineer ? "bg-purple-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"}`}
+        >
+          Reverse Engineer
         </button>
       </header>
 
@@ -225,31 +236,41 @@ export default function App() {
               selectedPath={editor.selectedFile?.path ?? null}
               onSelect={handleSelectFile}
               onOpen={handleNavigate}
+              onDragStart={dnd.handleDragStart}
+              onDropOnDir={dnd.handleDropOnDir}
             />
           )}
         </div>
 
-        {/* Preview panel */}
-        {editor.selectedFile && isEditable(editor.selectedFile.name) && (
-          <FilePreview
-            file={editor.selectedFile}
-            content={editor.content}
-            onClose={() => {}}
-          />
-        )}
-
-        {/* Editor panel */}
+        {/* Editor panel with tabs */}
         <EditorPanel
-          file={editor.selectedFile}
-          content={editor.content}
-          original={editor.original}
-          loading={editor.loading}
-          saving={editor.saving}
-          error={editor.error}
-          viewMode={viewMode}
-          onContentChange={editor.setContent}
+          tabs={editor.tabs}
+          activeTabIndex={editor.activeTabIndex}
+          showSearch={editor.showSearch}
+          search={editor.search}
+          autoSave={editor.autoSave}
+          wordWrap={editor.wordWrap}
+          lineNumbers={editor.lineNumbers}
+          hasDirtyTabs={editor.hasDirtyTabs}
+          dirtyCount={editor.dirtyCount}
+          onContentChange={editor.updateContent}
           onSave={editor.saveFile}
-          onClose={editor.close}
+          onSaveAll={editor.saveAll}
+          onClose={editor.closeTab}
+          onCloseAll={editor.closeAll}
+          onSetActive={editor.setActiveTab}
+          onToggleSearch={editor.toggleSearch}
+          onSetSearchQuery={editor.setSearchQuery}
+          onSetReplace={editor.setReplace}
+          onToggleCaseSensitive={editor.toggleCaseSensitive}
+          onFindNext={editor.findNext}
+          onFindPrev={editor.findPrev}
+          onReplaceOne={editor.replaceOne}
+          onReplaceAll={editor.replaceAll}
+          onToggleAutoSave={editor.toggleAutoSave}
+          onToggleWordWrap={editor.toggleWordWrap}
+          onToggleLineNumbers={editor.toggleLineNumbers}
+          viewMode={viewMode}
         />
       </div>
 
