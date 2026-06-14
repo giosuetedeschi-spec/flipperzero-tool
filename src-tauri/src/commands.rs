@@ -220,6 +220,64 @@ pub fn serial_is_connected(
 }
 
 #[tauri::command]
+pub async fn serial_delete(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    path: String,
+) -> Result<bool, AppError> {
+    super::serial::delete_path(&state, &path)
+}
+
+#[tauri::command]
+pub async fn serial_mkdir(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    path: String,
+) -> Result<bool, AppError> {
+    super::serial::mkdir_path(&state, &path)
+}
+
+#[tauri::command]
+pub async fn serial_stat(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    path: String,
+) -> Result<FileInfo, AppError> {
+    super::serial::stat_path(&state, &path)
+}
+
+#[tauri::command]
+pub async fn serial_autodetect_connect(
+    state: tauri::State<'_, super::serial::FlipperState>,
+) -> Result<bool, AppError> {
+    super::serial::autodetect_connect(&state)
+}
+
+#[tauri::command]
+pub async fn serial_upload(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    local_path: String,
+    remote_path: String,
+) -> Result<bool, AppError> {
+    // Read local file and write to Flipper
+    let data = std::fs::read(&local_path).map_err(AppError::from)?;
+    let text = String::from_utf8(data)
+        .map_err(|e| AppError::ParseError(format!("Not valid UTF-8: {}", e)))?;
+    super::serial::write_file_text(&state, &remote_path, &text)
+}
+
+#[tauri::command]
+pub async fn serial_download(
+    state: tauri::State<'_, super::serial::FlipperState>,
+    remote_path: String,
+    local_path: String,
+) -> Result<bool, AppError> {
+    let text = super::serial::read_file_text(&state, &remote_path)?;
+    // Safe save: write to temp then rename
+    let temp = std::path::Path::new(&local_path).with_extension("tmp");
+    std::fs::write(&temp, text.as_bytes()).map_err(AppError::from)?;
+    std::fs::rename(&temp, &local_path).map_err(AppError::from)?;
+    Ok(true)
+}
+
+#[tauri::command]
 pub async fn local_read_file(path: String) -> Result<String, AppError> {
     let bytes = fs::read(&path)
         .map_err(|e| AppError::from(e))?;
@@ -247,13 +305,45 @@ pub async fn local_write_file(path: String, data: String) -> Result<bool, AppErr
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn fs_index_device() -> Result<bool, AppError> {
-    super::vfs::reindex()
+pub fn fs_index_device(app: tauri::AppHandle) -> Result<bool, AppError> {
+    super::vfs::reindex_app(&app)
 }
 
 #[tauri::command]
-pub fn fs_get_cached_tree() -> Result<Vec<FileInfo>, AppError> {
-    super::vfs::get_tree()
+pub fn fs_get_cached_tree(app: tauri::AppHandle) -> Result<Vec<FileInfo>, AppError> {
+    super::vfs::get_tree_app(&app)
+}
+
+#[tauri::command]
+pub fn fs_cache_file(app: tauri::AppHandle, path: String, data: Vec<u8>) -> Result<(), AppError> {
+    super::vfs::cache_file(&app, &path, &data)
+}
+
+#[tauri::command]
+pub fn fs_get_cached_file(app: tauri::AppHandle, path: String) -> Result<Option<Vec<u8>>, AppError> {
+    super::vfs::get_cached_file(&app, &path)
+}
+
+#[tauri::command]
+pub fn fs_insert_file(app: tauri::AppHandle, path: String, name: String, size: u64, is_dir: bool) -> Result<(), AppError> {
+    use super::commands::FileInfo;
+    super::vfs::insert_file(&app, &FileInfo {
+        path,
+        name,
+        size,
+        is_dir,
+        modified: None,
+    })
+}
+
+#[tauri::command]
+pub fn fs_remove_file(app: tauri::AppHandle, path: String) -> Result<(), AppError> {
+    super::vfs::remove_file(&app, &path)
+}
+
+#[tauri::command]
+pub fn fs_clear_cache(app: tauri::AppHandle) -> Result<(), AppError> {
+    super::vfs::clear_cache(&app)
 }
 
 // ---------------------------------------------------------------------------

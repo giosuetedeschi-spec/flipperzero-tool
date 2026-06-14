@@ -174,3 +174,60 @@ export async function ufbt_deploy(path: string): Promise<string> {
 export async function ufbt_clean(path: string): Promise<string> {
   try { return await invoke<string>("ufbt_clean", { path }); } catch (e) { throw new Error(getErrorMessage(e)); }
 }
+
+
+// ---------------------------------------------------------------------------
+// Serial extended commands (P2)
+// ---------------------------------------------------------------------------
+
+export async function serialDelete(path: string): Promise<boolean> {
+  return invoke<boolean>("serial_delete", { path });
+}
+
+export async function serialMkdir(path: string): Promise<boolean> {
+  return invoke<boolean>("serial_mkdir", { path });
+}
+
+export async function serialStat(path: string): Promise<FileInfo> {
+  return invoke<FileInfo>("serial_stat", { path });
+}
+
+export async function serialAutodetectConnect(): Promise<boolean> {
+  return invoke<boolean>("serial_autodetect_connect");
+}
+
+export async function serialUpload(localPath: string, remotePath: string): Promise<boolean> {
+  return invoke<boolean>("serial_upload", { localPath, remotePath });
+}
+
+export async function serialDownload(remotePath: string, localPath: string): Promise<boolean> {
+  return invoke<boolean>("serial_download", { remotePath, localPath });
+}
+
+// ---------------------------------------------------------------------------
+// VFS commands (P2)
+// ---------------------------------------------------------------------------
+
+export async function fsClearCache(): Promise<void> {
+  return invoke<void>("fs_clear_cache");
+}
+
+export async function fsRemoveFile(path: string): Promise<void> {
+  return invoke<void>("fs_remove_file", { path });
+}
+
+export interface ReindexProgress {
+  current: number;
+  total: number;
+  path: string;
+}
+
+// ---------------------------------------------------------------------------
+// Upload/Download with progress callback (P2d)
+// ---------------------------------------------------------------------------
+
+export interface TransferProgress {
+  bytesTransferred: number;
+  totalBytes: number;
+  fileName: string;
+}

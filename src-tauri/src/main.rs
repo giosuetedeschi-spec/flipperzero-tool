@@ -22,6 +22,13 @@ fn main() {
             commands::create_file_from_template,
             commands::local_read_file,
             commands::local_write_file,
+            commands::rename_file,
+            commands::delete_file,
+            commands::copy_file,
+            commands::get_file_content,
+            commands::write_file_content,
+            commands::get_app_paths,
+            commands::open_in_system,
             // Serial (async)
             commands::serial_list_ports,
             commands::serial_connect,
@@ -30,9 +37,20 @@ fn main() {
             commands::serial_write_file,
             commands::serial_list_dir,
             commands::serial_is_connected,
+            commands::serial_delete,
+            commands::serial_mkdir,
+            commands::serial_stat,
+            commands::serial_autodetect_connect,
+            commands::serial_upload,
+            commands::serial_download,
             // VFS
             commands::fs_index_device,
             commands::fs_get_cached_tree,
+            commands::fs_cache_file,
+            commands::fs_get_cached_file,
+            commands::fs_insert_file,
+            commands::fs_remove_file,
+            commands::fs_clear_cache,
             // Parsers
             commands::parser_parse_sub,
             commands::parser_parse_ir,
@@ -40,6 +58,15 @@ fn main() {
             // uFBT
             commands::ufbt_new_project,
             commands::ufbt_compile,
+            commands::ufbt_is_installed,
+            commands::ufbt_get_version,
+            commands::ufbt_get_sdk_version,
+            commands::ufbt_install,
+            commands::ufbt_update,
+            commands::ufbt_create,
+            commands::ufbt_build,
+            commands::ufbt_deploy,
+            commands::ufbt_clean,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
