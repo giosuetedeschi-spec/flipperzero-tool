@@ -10,9 +10,10 @@ import {
 
 interface Props {
   onConnectionChange?: (connected: boolean) => void;
+  mockMode?: boolean;
 }
 
-export default function DevicePanel({ onConnectionChange }: Props) {
+export default function DevicePanel({ onConnectionChange, mockMode = false }: Props) {
   const [ports, setPorts] = useState<PortInfo[]>([]);
   const [selectedPort, setSelectedPort] = useState("");
   const [connected, setConnected] = useState(false);
@@ -102,15 +103,20 @@ export default function DevicePanel({ onConnectionChange }: Props) {
       </h3>
 
       {/* Connection status indicator */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div
           className={`w-3 h-3 rounded-full ${
-            connected ? "bg-green-500 animate-pulse" : "bg-red-500"
+            mockMode ? "bg-purple-500 animate-pulse" : connected ? "bg-green-500 animate-pulse" : "bg-red-500"
           }`}
         />
         <span className="text-sm text-gray-300">
-          {connected ? "Connected" : "Disconnected"}
+          {mockMode ? "Mock Flipper Active" : connected ? "Connected" : "Disconnected"}
         </span>
+        {mockMode && (
+          <span className="rounded-full border border-purple-500 bg-purple-700/40 px-2 py-1 text-xs text-purple-100">
+            Mock mode
+          </span>
+        )}
       </div>
 
       {/* Port selector */}

@@ -1,4 +1,3 @@
-import { type FileInfo } from "../services/tauri";
 import { isEditable, formatSize, type Tab } from "../hooks/useEditor";
 import CodeMirrorEditor from "./editor/CodeMirrorEditor";
 import { useState } from "react";
@@ -184,7 +183,7 @@ export default function EditorPanel({
             </div>
           ) : (
             <CodeMirrorEditor
-              content={activeTab.content}
+              value={activeTab.content}
               onChange={(v: string) => onContentChange(activeTabIndex, v)}
               language={getLanguage(activeTab.file.name)}
               wordWrap={wordWrap}

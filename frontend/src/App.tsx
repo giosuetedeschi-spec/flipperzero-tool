@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { listDirectory, serialListPorts, serialConnect, serialDisconnect, serialIsConnected, createFileFromTemplate, moveFile, type FileInfo, type PortInfo } from "./services/tauri";
+import { useState } from "react";
+import { serialDisconnect, createFileFromTemplate, moveFile, type FileInfo } from "./services/tauri";
 import { useDirectory } from "./hooks/useDirectory";
 import { useEditor } from "./hooks/useEditor";
 import { useDragDrop } from "./hooks/useDragDrop";
@@ -8,8 +8,6 @@ import EditorPanel from "./components/EditorPanel";
 import NewFileModal from "./components/NewFileModal";
 import DevicePanel from "./components/DevicePanel";
 import { ToastContainer, showToast } from "./components/ui/Toast";
-import FilePreview from "./components/FilePreview";
-import ReverseEngineerPanel from "./components/ReverseEngineerPanel";
 
 type ViewMode = "local" | "serial";
 
@@ -18,18 +16,17 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("local");
 
   // --- Serial state ---
-  const [ports, setPorts] = useState<PortInfo[]>([]);
-  const [selectedPort, setSelectedPort] = useState("");
   const [serialConnected, setSerialConnected] = useState(false);
-  const [serialError, setSerialError] = useState<string | null>(null);
+  const [mockMode, setMockMode] = useState(false);
+  const effectiveSerialConnected = serialConnected || mockMode;
 
   // --- New file modal ---
   const [showNewFile, setShowNewFile] = useState(false);
   const [showReverseEngineer, setShowReverseEngineer] = useState(false);
 
   // --- Custom hooks ---
-  const dir = useDirectory(viewMode, serialConnected);
-  const editor = useEditor(viewMode);
+  const dir = useDirectory(viewMode, effectiveSerialConnected, mockMode);
+  const editor = useEditor(viewMode, mockMode);
   const dnd = useDragDrop(async (file: FileInfo, targetPath: string) => {
     try {
       const dest = targetPath + "/" + file.name;
@@ -41,55 +38,22 @@ export default function App() {
     }
   });
 
-  // --- Serial port discovery ---
-  const refreshPorts = useCallback(async () => {
-    try {
-      const p = await serialListPorts();
-      setPorts(p);
-      setSerialError(null);
-    } catch (err) {
-      setSerialError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (viewMode === "serial") {
-      refreshPorts();
-      // Auto-refresh every 5s
-      const interval = setInterval(refreshPorts, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [viewMode, refreshPorts]);
-
   // --- Serial connect/disconnect ---
-  const handleConnect = async () => {
-    if (!selectedPort) { setSerialError("Select a port first"); return; }
-    setSerialError(null);
-    try {
-      await serialConnect(selectedPort);
-      setSerialConnected(true);
-      dir.setCurrentPath("/ext");
-      showToast("Connected to Flipper", "success");
-    } catch (err) {
-      setSerialError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
   const handleDisconnect = async () => {
     try { await serialDisconnect(); } catch { /* ignore */ }
     setSerialConnected(false);
     dir.setCurrentPath("");
     const saved = localStorage.getItem("flipper_root_path");
     if (saved) dir.setCurrentPath(saved);
-    editor.close();
-    setSelectedPort("");
+    editor.closeAll();
     showToast("Disconnected", "info");
   };
 
   const handleSwitchMode = (mode: ViewMode) => {
     if (mode !== viewMode && serialConnected) handleDisconnect();
     setViewMode(mode);
-    editor.close();
+    if (mode !== "serial") setMockMode(false);
+    editor.closeAll();
     dir.setError(null);
   };
 
@@ -98,7 +62,7 @@ export default function App() {
     if (info.is_dir) {
       dir.setCurrentPath(info.path);
       dir.setSearchQuery("");
-      editor.close();
+      editor.closeAll();
     }
   };
 
@@ -118,17 +82,6 @@ export default function App() {
     }
   };
 
-  const handleDeleteFile = async (path: string) => {
-    try {
-      const { delete_file } = await import("./services/tauri");
-      await delete_file(path);
-      dir.refresh();
-      showToast("File deleted", "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err), "error");
-    }
-  };
-
   // --- Render ---
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
@@ -137,25 +90,33 @@ export default function App() {
         <h1 className="text-lg font-bold text-emerald-400">Flipper Tool</h1>
 
         {/* Mode toggle */}
-        <div className="flex items-center bg-gray-700 rounded-lg p-0.5">
+        <div className="flex items-center rounded-2xl bg-gray-700 p-1 gap-1">
           <button
             onClick={() => handleSwitchMode("local")}
-            className={`px-3 py-1 rounded text-sm font-medium transition ${viewMode === "local" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+            className={`rounded-2xl px-4 py-2 text-sm font-semibold transition border ${viewMode === "local" ? "bg-emerald-600 text-white border-emerald-500" : "border-gray-600 text-gray-200 bg-gray-800 hover:border-gray-500 hover:text-white"}`}
           >
             Local
           </button>
           <button
             onClick={() => handleSwitchMode("serial")}
-            className={`px-3 py-1 rounded text-sm font-medium transition ${viewMode === "serial" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+            className={`rounded-2xl px-4 py-2 text-sm font-semibold transition border ${viewMode === "serial" ? "bg-emerald-600 text-white border-emerald-500" : "border-gray-600 text-gray-200 bg-gray-800 hover:border-gray-500 hover:text-white"}`}
           >
             Serial
           </button>
+          {viewMode === "serial" && (
+            <button
+              onClick={() => setMockMode(!mockMode)}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition border ${mockMode ? "bg-purple-600 text-white border-purple-500" : "border-gray-600 text-gray-200 bg-gray-800 hover:border-gray-500 hover:text-white"}`}
+            >
+              {mockMode ? "Mock On" : "Mock Off"}
+            </button>
+          )}
         </div>
 
         {/* Serial controls */}
         {viewMode === "serial" && (
           <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col p-3 gap-3">
-            <DevicePanel onConnectionChange={setSerialConnected} />
+            <DevicePanel onConnectionChange={setSerialConnected} mockMode={mockMode} />
           </div>
         )}
 
@@ -163,13 +124,13 @@ export default function App() {
         <div className="flex-1 flex items-center gap-2">
           <button
             onClick={dir.goUp}
-            className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+            className="rounded-2xl border border-gray-600 bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
             title="Go to parent directory"
           >
             Up
           </button>
-          <span className="flex-1 px-3 py-1 bg-gray-700 rounded text-sm font-mono text-gray-300 truncate">
-            {dir.currentPath || "(no folder selected)"}
+          <span className="flex-1 rounded-2xl bg-gray-700 px-4 py-2 text-sm font-mono text-gray-300 truncate">
+            {viewMode === "serial" && mockMode ? "/mock" : dir.currentPath || "(no folder selected)"}
           </span>
         </div>
 
@@ -179,17 +140,17 @@ export default function App() {
           placeholder="Search..."
           value={dir.searchQuery}
           onChange={(e) => dir.setSearchQuery(e.target.value)}
-          className="px-3 py-1 bg-gray-700 rounded text-sm w-48 placeholder-gray-500"
+          className="rounded-2xl border border-gray-600 bg-gray-700 px-4 py-2 text-sm text-gray-100 w-52 placeholder-gray-500 focus:border-emerald-500 focus:outline-none"
         />
         <button
           onClick={() => setShowNewFile(!showNewFile)}
-          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-medium"
+          className="rounded-2xl border border-emerald-500 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500"
         >
           + New
         </button>
         <button
           onClick={() => setShowReverseEngineer(!showReverseEngineer)}
-          className={`px-3 py-1 rounded text-sm font-medium ${showReverseEngineer ? "bg-purple-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"}`}
+          className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${showReverseEngineer ? "bg-purple-600 text-white border-purple-500" : "border-gray-600 bg-gray-700 text-gray-200 hover:border-gray-500 hover:text-white"}`}
         >
           Reverse Engineer
         </button>
@@ -197,9 +158,21 @@ export default function App() {
 
       {/* Error bar */}
       {dir.error && (
-        <div className="bg-red-900/80 border-b border-red-700 px-4 py-2 flex items-center justify-between">
-          <span className="text-red-200 text-sm">{dir.error}</span>
-          <button onClick={() => dir.setError(null)} className="text-red-300 hover:text-red-100 text-sm">X</button>
+        <div className="bg-red-950/95 border-b border-red-700 px-4 py-3 flex flex-col gap-2 text-left">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-100">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-700 text-xs">!</span>
+              <span>Error loading files</span>
+            </div>
+            <button onClick={() => dir.setError(null)} className="text-red-300 hover:text-red-100 text-sm">Dismiss</button>
+          </div>
+          <div className="rounded-lg bg-red-900/80 border border-red-700 p-3 text-xs leading-5 text-red-100 whitespace-pre-wrap">
+            {dir.error}
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] text-slate-300">
+            <span>Try refreshing or selecting a different folder.</span>
+            <button onClick={dir.refresh} className="rounded bg-slate-800 px-2 py-1 text-slate-100 hover:bg-slate-700">Refresh</button>
+          </div>
         </div>
       )}
 
@@ -277,7 +250,7 @@ export default function App() {
       {/* Footer */}
       <footer className="bg-gray-800 border-t border-gray-700 px-4 py-2 text-xs text-gray-500 flex justify-between">
         <span>{dir.files.length} items</span>
-        <span>{viewMode === "serial" ? (serialConnected ? "Flipper Connected" : "Serial Mode") : "Mock SD"}</span>
+        <span>{viewMode === "serial" ? (mockMode ? "Mock Flipper Active" : serialConnected ? "Flipper Connected" : "Serial Mode") : "Local Mode"}</span>
         {editor.dirty && <span className="text-amber-400">Unsaved changes</span>}
       </footer>
 

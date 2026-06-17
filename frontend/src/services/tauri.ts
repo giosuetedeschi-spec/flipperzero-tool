@@ -20,15 +20,33 @@ export interface AppError {
 }
 
 export interface PortInfo {
-  name: string;
+  port_name: string;
   port_type: string;
-  description: string | null;
+  manufacturer: string | null;
+  product: string | null;
+  serial_number: string | null;
 }
 
-function getErrorMessage(error: AppError | string): string {
+function getErrorMessage(error: AppError | string | unknown): string {
   if (typeof error === "string") return error;
-  const entry = Object.entries(error)[0];
-  return entry ? entry[1] || entry[0] : "Unknown error";
+  if (error instanceof Error) return error.message || error.name;
+  if (error && typeof error === "object") {
+    const entries = Object.entries(error as Record<string, unknown>);
+    if (entries.length > 0) {
+      return entries
+        .map(([key, value]) => {
+          const text = value === undefined || value === null ? key : String(value);
+          return `${key}: ${text}`;
+        })
+        .join(" | ");
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return "Unknown error";
 }
 
 // ---------------------------------------------------------------------------
@@ -148,31 +166,31 @@ export async function serialIsConnected(): Promise<boolean> {
 
 // uFBT commands (FASE 4)
 export async function ufbt_is_installed(): Promise<boolean> {
-  try { return await invoke<boolean>("ufbt_is_installed"); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<boolean>("ufbt_is_installed"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_get_version(): Promise<string> {
-  try { return await invoke<string>("ufbt_get_version"); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_get_version"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_get_sdk_version(): Promise<string> {
-  try { return await invoke<string>("ufbt_get_sdk_version"); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_get_sdk_version"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_install(): Promise<string> {
-  try { return await invoke<string>("ufbt_install"); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_install"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_update(): Promise<string> {
-  try { return await invoke<string>("ufbt_update"); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_update"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_create(name: string, path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_create", { name, path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_create", { name, path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_build(path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_build", { path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_build", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_deploy(path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_deploy", { path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_deploy", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 export async function ufbt_clean(path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_clean", { path }); } catch (e) { throw new Error(getErrorMessage(e)); }
+  try { return await invoke<string>("ufbt_clean", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
 }
 
 

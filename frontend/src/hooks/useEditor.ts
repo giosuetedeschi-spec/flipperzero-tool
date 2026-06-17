@@ -42,7 +42,7 @@ export interface EditorState {
   lineNumbers: boolean;
 }
 
-export function useEditor(viewMode: "local" | "serial") {
+export function useEditor(viewMode: "local" | "serial", mockMode = false) {
   const [state, setState] = useState<EditorState>({
     tabs: [],
     activeTabIndex: -1,
@@ -55,9 +55,18 @@ export function useEditor(viewMode: "local" | "serial") {
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewModeRef = useRef(viewMode);
+  const mockModeRef = useRef(mockMode);
   viewModeRef.current = viewMode;
+  mockModeRef.current = mockMode;
 
   // ---- Tab management ----
+
+  const MOCK_FILE_CONTENT: Record<string, string> = {
+    "/mock/readme.txt": "# Mock Flipper file system\nThis file simulates an inserted Flipper Zero device.\n\nUse this mode to browse a mock filesystem without a physical device.\n",
+    "/mock/apps/subghz.conf": "# Mock subGHz configuration\nenabled=true\nfrequency=433.92\n",
+    "/mock/apps/ir_remote.txt": "# Mock IR remote profile\nNAME=TV\nCODE=0x1FE48B7\n",
+    "/mock/ext/nfc.bin": "Mock NFC binary content placeholder\n",
+  };
 
   const openFile = useCallback(async (file: FileInfo) => {
     if (!isEditable(file.name)) return;
@@ -76,8 +85,13 @@ export function useEditor(viewMode: "local" | "serial") {
 
     // Load content
     try {
-      const readFn = viewMode === "serial" ? serialReadFile : localReadFile;
-      const content = await readFn(file.path);
+      let content: string;
+      if (viewMode === "serial" && mockMode) {
+        content = MOCK_FILE_CONTENT[file.path] ?? `Mock file content for ${file.name}\n`;
+      } else {
+        const readFn = viewMode === "serial" ? serialReadFile : localReadFile;
+        content = await readFn(file.path);
+      }
       setState(prev => {
         const tabs = prev.tabs.map((t, i) =>
           i === prev.activeTabIndex ? { ...t, content, original: content, loading: false, dirty: false } : t
@@ -141,8 +155,12 @@ export function useEditor(viewMode: "local" | "serial") {
     if (!tab) return;
 
     try {
-      const writeFn = viewModeRef.current === "serial" ? serialWriteFile : localWriteFile;
-      await writeFn(tab.file.path, tab.content);
+      if (viewModeRef.current === "serial" && mockModeRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } else {
+        const writeFn = viewModeRef.current === "serial" ? serialWriteFile : localWriteFile;
+        await writeFn(tab.file.path, tab.content);
+      }
       setState(prev => {
         const tabs = prev.tabs.map((t, i) =>
           i === index ? { ...t, original: tab.content, dirty: false, saving: false } : t
@@ -171,7 +189,7 @@ export function useEditor(viewMode: "local" | "serial") {
     setState(prev => ({ ...prev, showSearch: !prev.showSearch }));
   }, []);
 
-  const setSearchQuery = useCallback((query: string) {
+  const setSearchQuery = useCallback((query: string) => {
     setState(prev => ({ ...prev, search: { ...prev.search, query } }));
   }, []);
 
@@ -272,6 +290,7 @@ export function useEditor(viewMode: "local" | "serial") {
     tabs: state.tabs,
     activeTabIndex: state.activeTabIndex,
     activeTab: state.tabs[state.activeTabIndex] || null,
+    selectedFile: state.tabs[state.activeTabIndex]?.file || null,
     showSearch: state.showSearch,
     search: state.search,
     autoSave: state.autoSave,
@@ -279,9 +298,11 @@ export function useEditor(viewMode: "local" | "serial") {
     lineNumbers: state.lineNumbers,
     hasDirtyTabs: state.tabs.some(t => t.dirty),
     dirtyCount: state.tabs.filter(t => t.dirty).length,
+    dirty: state.tabs.some(t => t.dirty),
     // Tab actions
     openFile,
     closeTab,
+    close: closeTab,
     setActiveTab,
     closeAll,
     // Content

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useCallback } from "react";
-import { EditorState } from "@codemirror/state";
+import { useEffect, useRef } from "react";
+import { type Extension, EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from "@codemirror/view";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter } from "@codemirror/language";
@@ -15,6 +15,11 @@ interface Props {
   onChange: (value: string) => void;
   language?: string;
   readOnly?: boolean;
+  wordWrap?: boolean;
+  lineNumbers?: boolean;
+  searchQuery?: string;
+  searchCaseSensitive?: boolean;
+  searchCurrentMatch?: number;
 }
 
 function getLanguageExtension(lang?: string) {
@@ -56,13 +61,12 @@ export default function CodeMirrorEditor({ value, onChange, language, readOnly }
         history(),
         foldGutter(),
         bracketMatching(),
-        indentWithTab,
         autocompletion(),
         highlightSelectionMatches(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         oneDark,
         languageExt,
-        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...lintKeymap]),
+        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...lintKeymap] as any),
         updateListener,
         EditorView.theme({
           "&": { height: "100%", fontSize: "13px" },

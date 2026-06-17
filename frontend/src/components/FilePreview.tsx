@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { parser_parse_sub, parser_parse_ir, parser_parse_nfc, type FileInfo } from "../services/tauri";
+import { type FileInfo } from "../services/tauri";
 import { isEditable } from "../hooks/useEditor";
 import SubGhzViewer from "./SubGhzViewer";
 import IrViewer from "./IrViewer";

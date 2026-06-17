@@ -27,8 +27,8 @@ export default function SerialPanel({
         >
           <option value="">-- Select Port --</option>
           {ports.map((p) => (
-            <option key={p.name} value={p.name}>
-              {p.name} ({p.description || p.port_type})
+            <option key={p.port_name} value={p.port_name}>
+              {p.port_name} ({p.product || p.port_type})
             </option>
           ))}
         </select>

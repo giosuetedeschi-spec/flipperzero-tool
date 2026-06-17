@@ -1,7 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { listDirectory, findFiles, type FileInfo } from "../services/tauri";
 
-export function useDirectory(viewMode: "local" | "serial", serialConnected: boolean) {
+const MOCK_FILE_TREE: Record<string, FileInfo[]> = {
+  "/mock": [
+    { path: "/mock/apps", name: "apps", size: 0, is_dir: true, modified: "2026-01-01T12:00:00Z" },
+    { path: "/mock/ext", name: "ext", size: 0, is_dir: true, modified: "2026-01-01T12:00:00Z" },
+    { path: "/mock/readme.txt", name: "readme.txt", size: 128, is_dir: false, modified: "2026-01-01T12:30:00Z" },
+  ],
+  "/mock/apps": [
+    { path: "/mock/apps/subghz.conf", name: "subghz.conf", size: 2048, is_dir: false, modified: "2026-01-01T12:15:00Z" },
+    { path: "/mock/apps/ir_remote.txt", name: "ir_remote.txt", size: 512, is_dir: false, modified: "2026-01-01T12:20:00Z" },
+  ],
+  "/mock/ext": [
+    { path: "/mock/ext/nfc.bin", name: "nfc.bin", size: 4096, is_dir: false, modified: "2026-01-01T12:10:00Z" },
+  ],
+};
+
+export function useDirectory(viewMode: "local" | "serial", serialConnected: boolean, mockMode: boolean) {
   const [currentPath, setCurrentPath] = useState("");
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +36,13 @@ export function useDirectory(viewMode: "local" | "serial", serialConnected: bool
         return;
       }
       let entries: FileInfo[];
-      if (viewMode === "serial") {
+      if (viewMode === "serial" && mockMode) {
+        const normalized = path || "/mock";
+        const list = MOCK_FILE_TREE[normalized] ?? [];
+        entries = list.filter((item) =>
+          !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      } else if (viewMode === "serial") {
         // Lazy import to avoid circular deps
         const { serialListDir } = await import("../services/tauri");
         entries = await serialListDir(path);
@@ -40,10 +61,10 @@ export function useDirectory(viewMode: "local" | "serial", serialConnected: bool
 
   // Reload on path/mode change
   useEffect(() => {
-    if (serialConnected || viewMode === "local") {
+    if (serialConnected || viewMode === "local" || mockMode) {
       loadDirectory(currentPath);
     }
-  }, [currentPath, viewMode, serialConnected, loadDirectory]);
+  }, [currentPath, viewMode, serialConnected, mockMode, loadDirectory]);
 
   // Search with debounce
   useEffect(() => {
