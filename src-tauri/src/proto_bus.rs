@@ -7,11 +7,11 @@
 //!   - RPC request/response matching via sequence_id
 //!   - Session management (ping, stop, etc.)
 
+use super::errors::AppError;
+use super::serial::FlipperConnection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use super::errors::AppError;
-use super::serial::{FlipperConnection, write_raw, read_raw};
 
 // ---------------------------------------------------------------------------
 // Message types (matching flipper.proto)
@@ -26,20 +26,43 @@ pub struct FileInfoProto {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum RpcContent {
-    StorageListRequest { path: String },
-    StorageListResponse { files: Vec<FileInfoProto> },
-    StorageReadRequest { path: String },
-    StorageReadResponse { data: Vec<u8> },
-    StorageWriteRequest { path: String, data: Vec<u8> },
+    StorageListRequest {
+        path: String,
+    },
+    StorageListResponse {
+        files: Vec<FileInfoProto>,
+    },
+    StorageReadRequest {
+        path: String,
+    },
+    StorageReadResponse {
+        data: Vec<u8>,
+    },
+    StorageWriteRequest {
+        path: String,
+        data: Vec<u8>,
+    },
     StorageWriteResponse,
-    StorageDeleteRequest { path: String },
+    StorageDeleteRequest {
+        path: String,
+    },
     StorageDeleteResponse,
-    StorageMkdirRequest { path: String },
+    StorageMkdirRequest {
+        path: String,
+    },
     StorageMkdirResponse,
     DeviceInfoRequest,
-    DeviceInfoResponse { name: String, model: String, firmware: String },
-    PingRequest { data: Vec<u8> },
-    PingResponse { data: Vec<u8> },
+    DeviceInfoResponse {
+        name: String,
+        model: String,
+        firmware: String,
+    },
+    PingRequest {
+        data: Vec<u8>,
+    },
+    PingResponse {
+        data: Vec<u8>,
+    },
     StopSession,
 }
 
@@ -49,7 +72,8 @@ pub struct RpcMessage {
     pub content: Option<RpcContent>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+// Runtime-only bookkeeping (holds a live mpsc::Sender), never serialized.
+#[derive(Debug, Clone)]
 pub struct SessionState {
     pub session_id: u32,
     pub next_sequence: u32,
@@ -216,7 +240,11 @@ impl RpcMessage {
                 RpcContent::DeviceInfoRequest => {
                     result.extend_from_slice(&encode_message_field(20, &[]));
                 }
-                RpcContent::DeviceInfoResponse { name, model, firmware } => {
+                RpcContent::DeviceInfoResponse {
+                    name,
+                    model,
+                    firmware,
+                } => {
                     let mut inner = encode_string_field(1, name);
                     inner.extend_from_slice(&encode_string_field(2, model));
                     inner.extend_from_slice(&encode_string_field(3, firmware));
@@ -289,7 +317,10 @@ impl RpcMessage {
                         14 => {
                             let path = decode_string_field(field_data, 1)?;
                             let data_vec = decode_bytes_field(field_data, 2)?;
-                            Some(RpcContent::StorageWriteRequest { path, data: data_vec })
+                            Some(RpcContent::StorageWriteRequest {
+                                path,
+                                data: data_vec,
+                            })
                         }
                         15 => Some(RpcContent::StorageWriteResponse),
                         16 => {
@@ -307,7 +338,11 @@ impl RpcMessage {
                             let name = decode_string_field(field_data, 1)?;
                             let model = decode_string_field(field_data, 2)?;
                             let firmware = decode_string_field(field_data, 3)?;
-                            Some(RpcContent::DeviceInfoResponse { name, model, firmware })
+                            Some(RpcContent::DeviceInfoResponse {
+                                name,
+                                model,
+                                firmware,
+                            })
                         }
                         22 => {
                             let data_vec = decode_bytes_field(field_data, 1)?;
@@ -321,11 +356,19 @@ impl RpcMessage {
                         _ => None,
                     };
                 }
-                _ => return Err(AppError::ParseError(format!("Unknown wire type: {}", wire_type))),
+                _ => {
+                    return Err(AppError::ParseError(format!(
+                        "Unknown wire type: {}",
+                        wire_type
+                    )));
+                }
             }
         }
 
-        Ok(RpcMessage { sequence_id, content })
+        Ok(RpcMessage {
+            sequence_id,
+            content,
+        })
     }
 }
 
@@ -347,8 +390,14 @@ fn decode_string_field(data: &[u8], field: u32) -> Result<String, AppError> {
         // Skip unknown field
         let wire_type = tag & 0x7;
         match wire_type {
-            0 => { let (_, l) = decode_varint(&data[i..])?; i += l; }
-            2 => { let (l, ll) = decode_varint(&data[i..])?; i += ll + l as usize; }
+            0 => {
+                let (_, l) = decode_varint(&data[i..])?;
+                i += l;
+            }
+            2 => {
+                let (l, ll) = decode_varint(&data[i..])?;
+                i += ll + l as usize;
+            }
             _ => break,
         }
     }
@@ -367,8 +416,14 @@ fn decode_bytes_field(data: &[u8], field: u32) -> Result<Vec<u8>, AppError> {
         }
         let wire_type = tag & 0x7;
         match wire_type {
-            0 => { let (_, l) = decode_varint(&data[i..])?; i += l; }
-            2 => { let (l, ll) = decode_varint(&data[i..])?; i += ll + l as usize; }
+            0 => {
+                let (_, l) = decode_varint(&data[i..])?;
+                i += l;
+            }
+            2 => {
+                let (l, ll) = decode_varint(&data[i..])?;
+                i += ll + l as usize;
+            }
             _ => break,
         }
     }
@@ -420,7 +475,6 @@ fn decode_file_list(data: &[u8]) -> Result<Vec<FileInfoProto>, AppError> {
 // High-level RPC API
 // ---------------------------------------------------------------------------
 
-
 /// Send an RPC command and wait for the response.
 /// NOTE: ProtoBus requires serial read/write which are on FlipperConnection.
 /// For now, protobuf encode/decode is available; serial integration requires
@@ -431,12 +485,18 @@ pub fn rpc_command(
 ) -> Result<RpcMessage, AppError> {
     // TODO: integrate with serial port write/read
     // For now, return an error indicating serial ProtoBus is not yet connected
-    Err(AppError::SerialError("ProtoBus serial integration pending".to_string()))
+    Err(AppError::SerialError(
+        "ProtoBus serial integration pending".to_string(),
+    ))
 }
 
 /// Encode an RPC message to bytes (for sending over serial manually).
 pub fn encode_rpc(content: RpcContent, sequence_id: u32) -> Vec<u8> {
-    RpcMessage { sequence_id, content: Some(content) }.to_bytes()
+    RpcMessage {
+        sequence_id,
+        content: Some(content),
+    }
+    .to_bytes()
 }
 
 /// Decode an RPC message from bytes.
@@ -444,16 +504,22 @@ pub fn decode_rpc(data: &[u8]) -> Result<RpcMessage, AppError> {
     RpcMessage::from_bytes(data)
 }
 
-
 /// List files on the Flipper Zero.
 pub fn proto_list_dir(
     conn: &Arc<Mutex<FlipperConnection>>,
     path: &str,
 ) -> Result<Vec<FileInfoProto>, AppError> {
-    let resp = rpc_command(conn, RpcContent::StorageListRequest { path: path.to_string() })?;
+    let resp = rpc_command(
+        conn,
+        RpcContent::StorageListRequest {
+            path: path.to_string(),
+        },
+    )?;
     match resp.content {
         Some(RpcContent::StorageListResponse { files }) => Ok(files),
-        _ => Err(AppError::SerialError("Unexpected response type".to_string())),
+        _ => Err(AppError::SerialError(
+            "Unexpected response type".to_string(),
+        )),
     }
 }
 
@@ -462,10 +528,17 @@ pub fn proto_read_file(
     conn: &Arc<Mutex<FlipperConnection>>,
     path: &str,
 ) -> Result<Vec<u8>, AppError> {
-    let resp = rpc_command(conn, RpcContent::StorageReadRequest { path: path.to_string() })?;
+    let resp = rpc_command(
+        conn,
+        RpcContent::StorageReadRequest {
+            path: path.to_string(),
+        },
+    )?;
     match resp.content {
         Some(RpcContent::StorageReadResponse { data }) => Ok(data),
-        _ => Err(AppError::SerialError("Unexpected response type".to_string())),
+        _ => Err(AppError::SerialError(
+            "Unexpected response type".to_string(),
+        )),
     }
 }
 
@@ -475,37 +548,50 @@ pub fn proto_write_file(
     path: &str,
     data: &[u8],
 ) -> Result<(), AppError> {
-    let resp = rpc_command(conn, RpcContent::StorageWriteRequest {
-        path: path.to_string(),
-        data: data.to_vec(),
-    })?;
+    let resp = rpc_command(
+        conn,
+        RpcContent::StorageWriteRequest {
+            path: path.to_string(),
+            data: data.to_vec(),
+        },
+    )?;
     match resp.content {
         Some(RpcContent::StorageWriteResponse) => Ok(()),
-        _ => Err(AppError::SerialError("Unexpected response type".to_string())),
+        _ => Err(AppError::SerialError(
+            "Unexpected response type".to_string(),
+        )),
     }
 }
 
 /// Create a directory on the Flipper Zero.
-pub fn proto_mkdir(
-    conn: &Arc<Mutex<FlipperConnection>>,
-    path: &str,
-) -> Result<(), AppError> {
-    let resp = rpc_command(conn, RpcContent::StorageMkdirRequest { path: path.to_string() })?;
+pub fn proto_mkdir(conn: &Arc<Mutex<FlipperConnection>>, path: &str) -> Result<(), AppError> {
+    let resp = rpc_command(
+        conn,
+        RpcContent::StorageMkdirRequest {
+            path: path.to_string(),
+        },
+    )?;
     match resp.content {
         Some(RpcContent::StorageMkdirResponse) => Ok(()),
-        _ => Err(AppError::SerialError("Unexpected response type".to_string())),
+        _ => Err(AppError::SerialError(
+            "Unexpected response type".to_string(),
+        )),
     }
 }
 
 /// Delete a file/directory on the Flipper Zero.
-pub fn proto_delete(
-    conn: &Arc<Mutex<FlipperConnection>>,
-    path: &str,
-) -> Result<(), AppError> {
-    let resp = rpc_command(conn, RpcContent::StorageDeleteRequest { path: path.to_string() })?;
+pub fn proto_delete(conn: &Arc<Mutex<FlipperConnection>>, path: &str) -> Result<(), AppError> {
+    let resp = rpc_command(
+        conn,
+        RpcContent::StorageDeleteRequest {
+            path: path.to_string(),
+        },
+    )?;
     match resp.content {
         Some(RpcContent::StorageDeleteResponse) => Ok(()),
-        _ => Err(AppError::SerialError("Unexpected response type".to_string())),
+        _ => Err(AppError::SerialError(
+            "Unexpected response type".to_string(),
+        )),
     }
 }
 
@@ -515,19 +601,29 @@ pub fn proto_device_info(
 ) -> Result<(String, String, String), AppError> {
     let resp = rpc_command(conn, RpcContent::DeviceInfoRequest)?;
     match resp.content {
-        Some(RpcContent::DeviceInfoResponse { name, model, firmware }) => Ok((name, model, firmware)),
-        _ => Err(AppError::SerialError("Unexpected response type".to_string())),
+        Some(RpcContent::DeviceInfoResponse {
+            name,
+            model,
+            firmware,
+        }) => Ok((name, model, firmware)),
+        _ => Err(AppError::SerialError(
+            "Unexpected response type".to_string(),
+        )),
     }
 }
 
 /// Ping the Flipper Zero.
-pub fn proto_ping(
-    conn: &Arc<Mutex<FlipperConnection>>,
-    data: &[u8],
-) -> Result<Vec<u8>, AppError> {
-    let resp = rpc_command(conn, RpcContent::PingRequest { data: data.to_vec() })?;
+pub fn proto_ping(conn: &Arc<Mutex<FlipperConnection>>, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    let resp = rpc_command(
+        conn,
+        RpcContent::PingRequest {
+            data: data.to_vec(),
+        },
+    )?;
     match resp.content {
         Some(RpcContent::PingResponse { data }) => Ok(data),
-        _ => Err(AppError::SerialError("Unexpected response type".to_string())),
+        _ => Err(AppError::SerialError(
+            "Unexpected response type".to_string(),
+        )),
     }
 }

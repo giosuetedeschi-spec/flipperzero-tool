@@ -11,7 +11,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-prost-build = "0.13"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -22,8 +21,6 @@ thiserror = "1"
 serialport = "4"
 tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
-prost = "0.13"
-protobuf = "3"
 nom = "7"
 log = "0.4"
 env_logger = "0.11"

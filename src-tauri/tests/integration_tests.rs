@@ -1,6 +1,6 @@
 //! Integration tests for flipperzero-tool backend
 
-use flipperzero_tool_lib::{list_directory, find_files, create_file_from_template, move_file};
+use flipperzero_tool_lib::{create_file_from_template, find_files, list_directory, move_file};
 use std::fs;
 use std::path::Path;
 
@@ -52,7 +52,8 @@ fn test_create_file_from_template() {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir(&dir).unwrap();
     let path = dir.join("testfile");
-    let result = create_file_from_template(path.to_string_lossy().to_string(), "sub".to_string()).unwrap();
+    let result =
+        create_file_from_template(path.to_string_lossy().to_string(), "sub".to_string()).unwrap();
     assert!(Path::new(&result).exists());
     let _ = fs::remove_dir_all(&dir);
 }
@@ -77,7 +78,11 @@ fn test_move_file_success() {
     let src = dir.join("src.txt");
     let dst = dir.join("dst.txt");
     fs::write(&src, "data").unwrap();
-    move_file(src.to_string_lossy().to_string(), dst.to_string_lossy().to_string()).unwrap();
+    move_file(
+        src.to_string_lossy().to_string(),
+        dst.to_string_lossy().to_string(),
+    )
+    .unwrap();
     assert!(!src.exists());
     assert!(dst.exists());
     let _ = fs::remove_dir_all(&dir);
@@ -92,7 +97,10 @@ fn test_move_file_already_exists() {
     let dst = dir.join("dst.txt");
     fs::write(&src, "data").unwrap();
     fs::write(&dst, "existing").unwrap();
-    let result = move_file(src.to_string_lossy().to_string(), dst.to_string_lossy().to_string());
+    let result = move_file(
+        src.to_string_lossy().to_string(),
+        dst.to_string_lossy().to_string(),
+    );
     assert!(result.is_err());
     let _ = fs::remove_dir_all(&dir);
 }

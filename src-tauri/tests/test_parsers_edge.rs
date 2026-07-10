@@ -1,6 +1,6 @@
 //! Tests for parser module - edge cases
 
-use flipperzero_tool_lib::{parse_sub, parse_ir, parse_nfc};
+use flipperzero_tool_lib::{parse_ir, parse_nfc, parse_sub};
 
 #[test]
 fn test_parse_sub_empty() {
@@ -11,9 +11,12 @@ fn test_parse_sub_empty() {
 
 #[test]
 fn test_parse_sub_only_comments() {
-    let r = parse_sub("# comment
+    let r = parse_sub(
+        "# comment
 # another
-").unwrap();
+",
+    )
+    .unwrap();
     assert!(r.fields.is_empty());
 }
 
@@ -43,8 +46,15 @@ Key: AABB";
 
 #[test]
 fn test_parse_sub_preview_truncated() {
-    let input: String = (0..30).map(|i| format!("Line {}: val
-", i)).collect();
+    let input: String = (0..30)
+        .map(|i| {
+            format!(
+                "Line {}: val
+",
+                i
+            )
+        })
+        .collect();
     let r = parse_sub(&input).unwrap();
     assert_eq!(r.raw_preview.lines().count(), 20);
 }
@@ -136,9 +146,12 @@ Key: unicode_test_日本語
 #[test]
 fn test_all_parsers_long_input() {
     let val = "A".repeat(10000);
-    let input = format!("Filetype: Test
+    let input = format!(
+        "Filetype: Test
 Key: {}
-", val);
+",
+        val
+    );
     let r = parse_sub(&input).unwrap();
     assert_eq!(r.file_type, "subghz");
 }

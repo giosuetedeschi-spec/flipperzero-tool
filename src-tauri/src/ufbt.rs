@@ -6,9 +6,8 @@
 //!   - Install/update uFBT
 //!   - Create, build, and deploy .fap plugins
 
-use std::process::Command;
-use std::path::Path;
 use super::errors::AppError;
+use std::process::Command;
 
 /// Check if uFBT is installed and available in PATH.
 pub fn is_ufbt_installed() -> bool {
@@ -64,7 +63,10 @@ pub fn ufbt_install() -> Result<String, AppError> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(AppError::General(format!("ufbt install failed: {}", stderr)));
+        return Err(AppError::General(format!(
+            "ufbt install failed: {}",
+            stderr
+        )));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())

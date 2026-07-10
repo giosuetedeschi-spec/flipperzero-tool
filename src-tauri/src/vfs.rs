@@ -6,20 +6,22 @@
 //!   - File content caching
 //!   - Tree retrieval for the frontend
 
+use super::commands::FileInfo;
+use super::errors::AppError;
 use rusqlite::{Connection, params};
-use tauri::{AppHandle, Manager};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-use super::errors::AppError;
-use super::commands::FileInfo;
+use tauri::{AppHandle, Manager};
 
 // ---------------------------------------------------------------------------
 // Database path
 // ---------------------------------------------------------------------------
 
 fn db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
-    let dir = app.path().app_data_dir()
+    let dir = app
+        .path()
+        .app_data_dir()
         .map_err(|e| AppError::DbError(format!("Cannot get app data dir: {}", e)))?;
     std::fs::create_dir_all(&dir).map_err(AppError::from)?;
     Ok(dir.join("flipper_cache.db"))
@@ -53,7 +55,8 @@ fn get_conn(app: &AppHandle) -> Result<DbState, AppError> {
             parent TEXT
         )",
         [],
-    ).map_err(AppError::from)?;
+    )
+    .map_err(AppError::from)?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS file_cache (
@@ -62,12 +65,14 @@ fn get_conn(app: &AppHandle) -> Result<DbState, AppError> {
             cached_at TEXT DEFAULT CURRENT_TIMESTAMP
         )",
         [],
-    ).map_err(AppError::from)?;
+    )
+    .map_err(AppError::from)?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent)",
         [],
-    ).map_err(AppError::from)?;
+    )
+    .map_err(AppError::from)?;
 
     let state: DbState = Arc::new(StdMutex::new(conn));
     app.manage(state.clone());
@@ -101,10 +106,13 @@ pub fn reindex() -> Result<bool, AppError> {
 /// Re-index with a specific app handle (for Tauri commands).
 pub fn reindex_app(app: &AppHandle) -> Result<bool, AppError> {
     let state = get_conn(app)?;
-    let conn = state.lock().map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
+    let conn = state
+        .lock()
+        .map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
 
     // Clear existing entries
-    conn.execute("DELETE FROM files", []).map_err(AppError::from)?;
+    conn.execute("DELETE FROM files", [])
+        .map_err(AppError::from)?;
 
     // TODO: Walk Flipper filesystem via serial and insert entries
     // For now, insert some default Flipper directories
@@ -138,10 +146,14 @@ pub fn get_tree() -> Result<Vec<FileInfo>, AppError> {
 /// Get the cached file tree for a specific app.
 pub fn get_tree_app(app: &AppHandle) -> Result<Vec<FileInfo>, AppError> {
     let state = get_conn(app)?;
-    let conn = state.lock().map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
+    let conn = state
+        .lock()
+        .map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
 
     let mut stmt = conn
-        .prepare("SELECT path, name, size, is_dir, modified FROM files ORDER BY is_dir DESC, name ASC")
+        .prepare(
+            "SELECT path, name, size, is_dir, modified FROM files ORDER BY is_dir DESC, name ASC",
+        )
         .map_err(AppError::from)?;
 
     let rows = stmt
@@ -167,12 +179,15 @@ pub fn get_tree_app(app: &AppHandle) -> Result<Vec<FileInfo>, AppError> {
 /// Cache a file's content in the database.
 pub fn cache_file(app: &AppHandle, path: &str, content: &[u8]) -> Result<(), AppError> {
     let state = get_conn(app)?;
-    let conn = state.lock().map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
+    let conn = state
+        .lock()
+        .map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
 
     conn.execute(
         "INSERT OR REPLACE INTO file_cache (path, content) VALUES (?1, ?2)",
         params![path, content],
-    ).map_err(AppError::from)?;
+    )
+    .map_err(AppError::from)?;
 
     Ok(())
 }
@@ -180,7 +195,9 @@ pub fn cache_file(app: &AppHandle, path: &str, content: &[u8]) -> Result<(), App
 /// Get a cached file's content.
 pub fn get_cached_file(app: &AppHandle, path: &str) -> Result<Option<Vec<u8>>, AppError> {
     let state = get_conn(app)?;
-    let conn = state.lock().map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
+    let conn = state
+        .lock()
+        .map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
 
     let mut stmt = conn
         .prepare("SELECT content FROM file_cache WHERE path = ?1")
@@ -198,7 +215,9 @@ pub fn get_cached_file(app: &AppHandle, path: &str) -> Result<Option<Vec<u8>>, A
 /// Insert a file entry into the cache.
 pub fn insert_file(app: &AppHandle, info: &FileInfo) -> Result<(), AppError> {
     let state = get_conn(app)?;
-    let conn = state.lock().map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
+    let conn = state
+        .lock()
+        .map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
 
     let parent = PathBuf::from(&info.path)
         .parent()
@@ -222,7 +241,9 @@ pub fn insert_file(app: &AppHandle, info: &FileInfo) -> Result<(), AppError> {
 /// Remove a file entry from the cache.
 pub fn remove_file(app: &AppHandle, path: &str) -> Result<(), AppError> {
     let state = get_conn(app)?;
-    let conn = state.lock().map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
+    let conn = state
+        .lock()
+        .map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
 
     conn.execute("DELETE FROM files WHERE path = ?1", params![path])
         .map_err(AppError::from)?;
@@ -235,10 +256,14 @@ pub fn remove_file(app: &AppHandle, path: &str) -> Result<(), AppError> {
 /// Clear the entire cache.
 pub fn clear_cache(app: &AppHandle) -> Result<(), AppError> {
     let state = get_conn(app)?;
-    let conn = state.lock().map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
+    let conn = state
+        .lock()
+        .map_err(|e| AppError::DbError(format!("Mutex poisoned: {}", e)))?;
 
-    conn.execute("DELETE FROM files", []).map_err(AppError::from)?;
-    conn.execute("DELETE FROM file_cache", []).map_err(AppError::from)?;
+    conn.execute("DELETE FROM files", [])
+        .map_err(AppError::from)?;
+    conn.execute("DELETE FROM file_cache", [])
+        .map_err(AppError::from)?;
 
     Ok(())
 }
