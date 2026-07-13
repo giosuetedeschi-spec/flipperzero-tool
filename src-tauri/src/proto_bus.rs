@@ -446,20 +446,36 @@ fn decode_file_list(data: &[u8]) -> Result<Vec<FileInfoProto>, AppError> {
             let mut size = 0u32;
             let mut is_dir = false;
 
+            // Walk every field in the embedded FileInfo message; field 1
+            // (name, already parsed above) must be skipped rather than
+            // treated as "unknown", or fields 2/3 that follow it are
+            // never reached.
             let mut fi = 0;
             while fi < file_data.len() {
                 let (ftag, ftlen) = decode_varint(&file_data[fi..])?;
                 fi += ftlen;
-                if (ftag >> 3) == 2 {
-                    let (val, vlen) = decode_varint(&file_data[fi..])?;
-                    fi += vlen;
-                    size = val as u32;
-                } else if (ftag >> 3) == 3 {
-                    let (val, vlen) = decode_varint(&file_data[fi..])?;
-                    fi += vlen;
-                    is_dir = val != 0;
-                } else {
-                    break;
+                let field_number = ftag >> 3;
+                let wire_type = ftag & 0x7;
+                match (field_number, wire_type) {
+                    (2, 0) => {
+                        let (val, vlen) = decode_varint(&file_data[fi..])?;
+                        fi += vlen;
+                        size = val as u32;
+                    }
+                    (3, 0) => {
+                        let (val, vlen) = decode_varint(&file_data[fi..])?;
+                        fi += vlen;
+                        is_dir = val != 0;
+                    }
+                    (_, 0) => {
+                        let (_, vlen) = decode_varint(&file_data[fi..])?;
+                        fi += vlen;
+                    }
+                    (_, 2) => {
+                        let (len, len_len) = decode_varint(&file_data[fi..])?;
+                        fi += len_len + len as usize;
+                    }
+                    _ => break,
                 }
             }
 
@@ -625,5 +641,215 @@ pub fn proto_ping(conn: &Arc<Mutex<FlipperConnection>>, data: &[u8]) -> Result<V
         _ => Err(AppError::SerialError(
             "Unexpected response type".to_string(),
         )),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_varint_roundtrip() {
+        for val in [
+            0u64,
+            1,
+            127,
+            128,
+            300,
+            16383,
+            16384,
+            u32::MAX as u64,
+            u64::MAX,
+        ] {
+            let encoded = encode_varint(val);
+            let (decoded, len) = decode_varint(&encoded).unwrap();
+            assert_eq!(decoded, val);
+            assert_eq!(len, encoded.len());
+        }
+    }
+
+    #[test]
+    fn test_decode_varint_incomplete() {
+        // High bit set on the last byte with nothing following.
+        let result = decode_varint(&[0x80]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_varint_too_long() {
+        let bad = vec![0x80u8; 11];
+        let result = decode_varint(&bad);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_varint_returns_bytes_consumed_not_full_buffer() {
+        // A varint followed by trailing bytes should only consume its own bytes.
+        let mut buf = encode_varint(300);
+        buf.extend_from_slice(&[0xFF, 0xFF]);
+        let (value, len) = decode_varint(&buf).unwrap();
+        assert_eq!(value, 300);
+        assert_eq!(len, 2);
+    }
+
+    fn roundtrip(content: RpcContent, sequence_id: u32) -> RpcMessage {
+        let bytes = encode_rpc(content, sequence_id);
+        decode_rpc(&bytes).unwrap()
+    }
+
+    #[test]
+    fn test_rpc_message_roundtrip_storage_list_request() {
+        let msg = roundtrip(
+            RpcContent::StorageListRequest {
+                path: "/ext/subghz".to_string(),
+            },
+            7,
+        );
+        assert_eq!(msg.sequence_id, 7);
+        match msg.content {
+            Some(RpcContent::StorageListRequest { path }) => assert_eq!(path, "/ext/subghz"),
+            other => panic!("unexpected content: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_rpc_message_roundtrip_storage_list_response() {
+        let files = vec![
+            FileInfoProto {
+                name: "subghz".to_string(),
+                size: 0,
+                is_dir: true,
+            },
+            FileInfoProto {
+                name: "test.sub".to_string(),
+                size: 123,
+                is_dir: false,
+            },
+        ];
+        let msg = roundtrip(
+            RpcContent::StorageListResponse {
+                files: files.clone(),
+            },
+            1,
+        );
+        match msg.content {
+            Some(RpcContent::StorageListResponse { files: got }) => {
+                assert_eq!(got.len(), 2);
+                assert_eq!(got[0].name, "subghz");
+                assert!(got[0].is_dir);
+                assert_eq!(got[1].name, "test.sub");
+                assert_eq!(got[1].size, 123);
+                assert!(!got[1].is_dir);
+            }
+            other => panic!("unexpected content: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_rpc_message_roundtrip_storage_write_request_binary_data() {
+        let data = vec![0u8, 1, 2, 255, 128, 64];
+        let msg = roundtrip(
+            RpcContent::StorageWriteRequest {
+                path: "/ext/test.sub".to_string(),
+                data: data.clone(),
+            },
+            42,
+        );
+        match msg.content {
+            Some(RpcContent::StorageWriteRequest { path, data: got }) => {
+                assert_eq!(path, "/ext/test.sub");
+                assert_eq!(got, data);
+            }
+            other => panic!("unexpected content: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_rpc_message_roundtrip_empty_responses() {
+        for content in [
+            RpcContent::StorageWriteResponse,
+            RpcContent::StorageDeleteResponse,
+            RpcContent::StorageMkdirResponse,
+            RpcContent::DeviceInfoRequest,
+            RpcContent::StopSession,
+        ] {
+            let bytes = encode_rpc(content.clone(), 1);
+            let msg = decode_rpc(&bytes).unwrap();
+            assert_eq!(
+                std::mem::discriminant(msg.content.as_ref().unwrap()),
+                std::mem::discriminant(&content)
+            );
+        }
+    }
+
+    #[test]
+    fn test_rpc_message_roundtrip_device_info_response() {
+        let msg = roundtrip(
+            RpcContent::DeviceInfoResponse {
+                name: "Flipper".to_string(),
+                model: "Zero".to_string(),
+                firmware: "1.0.0".to_string(),
+            },
+            3,
+        );
+        match msg.content {
+            Some(RpcContent::DeviceInfoResponse {
+                name,
+                model,
+                firmware,
+            }) => {
+                assert_eq!(name, "Flipper");
+                assert_eq!(model, "Zero");
+                assert_eq!(firmware, "1.0.0");
+            }
+            other => panic!("unexpected content: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_rpc_message_roundtrip_ping() {
+        let msg = roundtrip(
+            RpcContent::PingRequest {
+                data: vec![1, 2, 3],
+            },
+            9,
+        );
+        match msg.content {
+            Some(RpcContent::PingRequest { data }) => assert_eq!(data, vec![1, 2, 3]),
+            other => panic!("unexpected content: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_rpc_message_no_content_roundtrips_to_none() {
+        let msg = RpcMessage {
+            sequence_id: 5,
+            content: None,
+        };
+        let bytes = msg.to_bytes();
+        let decoded = RpcMessage::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded.sequence_id, 5);
+        assert!(decoded.content.is_none());
+    }
+
+    #[test]
+    fn test_from_bytes_unknown_field_number_is_ignored() {
+        // Field 99, wire type 0 (varint), value 1 — not a recognized RpcContent field.
+        let mut bytes = encode_varint((99u64 << 3) | 0);
+        bytes.extend_from_slice(&encode_varint(1));
+        let msg = RpcMessage::from_bytes(&bytes).unwrap();
+        assert!(msg.content.is_none());
+    }
+
+    #[test]
+    fn test_from_bytes_invalid_wire_type_errors() {
+        // Wire type 5 (32-bit) is unsupported by this decoder.
+        let bytes = encode_varint((1u64 << 3) | 5);
+        let result = RpcMessage::from_bytes(&bytes);
+        assert!(result.is_err());
     }
 }

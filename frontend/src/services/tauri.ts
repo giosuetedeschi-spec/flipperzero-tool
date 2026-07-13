@@ -27,7 +27,7 @@ export interface PortInfo {
   serial_number: string | null;
 }
 
-function getErrorMessage(error: AppError | string | unknown): string {
+export function getErrorMessage(error: AppError | string | unknown): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message || error.name;
   if (error && typeof error === "object") {

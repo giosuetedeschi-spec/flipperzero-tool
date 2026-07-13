@@ -4,9 +4,6 @@ target/
 build/
 dist/
 
-# Rust
-Cargo.lock
-
 # IDE
 .idea/
 .vscode/
