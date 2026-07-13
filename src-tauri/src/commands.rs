@@ -1,8 +1,8 @@
+use super::errors::AppError;
+use super::parsers::ParsedFile;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use super::errors::AppError;
-use super::parsers::ParsedFile;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileInfo {
@@ -26,13 +26,18 @@ pub fn list_directory(path: String) -> Result<Vec<FileInfo>, AppError> {
     }
 
     if !dir_path.is_dir() {
-        return Err(AppError::General(format!("Path is not a directory: {}", path)));
+        return Err(AppError::General(format!(
+            "Path is not a directory: {}",
+            path
+        )));
     }
 
     let mut entries = Vec::new();
 
     for entry in fs::read_dir(dir_path).map_err(|e| match e.kind() {
-        std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied(format!("Cannot read directory: {}", path)),
+        std::io::ErrorKind::PermissionDenied => {
+            AppError::PermissionDenied(format!("Cannot read directory: {}", path))
+        }
         _ => AppError::from(e),
     })? {
         let entry = entry.map_err(AppError::from)?;
@@ -40,7 +45,8 @@ pub fn list_directory(path: String) -> Result<Vec<FileInfo>, AppError> {
         let file_name = entry.file_name().to_string_lossy().to_string();
         let file_path = entry.path().to_string_lossy().to_string();
 
-        let modified = metadata.modified()
+        let modified = metadata
+            .modified()
             .ok()
             .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs().to_string());
@@ -68,18 +74,26 @@ pub fn move_file(source: String, dest: String) -> Result<(), AppError> {
     }
 
     if dst.exists() {
-        return Err(AppError::AlreadyExists(format!("Destination already exists: {}", dest)));
+        return Err(AppError::AlreadyExists(format!(
+            "Destination already exists: {}",
+            dest
+        )));
     }
 
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent).map_err(|e| match e.kind() {
-            std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied(format!("Cannot create parent directory: {}", parent.display())),
+            std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied(format!(
+                "Cannot create parent directory: {}",
+                parent.display()
+            )),
             _ => AppError::from(e),
         })?;
     }
 
     fs::rename(src, dst).map_err(|e| match e.kind() {
-        std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied(format!("Cannot move: {}", e)),
+        std::io::ErrorKind::PermissionDenied => {
+            AppError::PermissionDenied(format!("Cannot move: {}", e))
+        }
         _ => AppError::from(e),
     })?;
 
@@ -97,18 +111,15 @@ pub fn find_files(path: String, pattern: String) -> Result<Vec<FileInfo>, AppErr
     let pattern_lower = pattern.to_lowercase();
     let mut results = Vec::new();
 
-    fn search_dir(
-        dir: &Path,
-        pattern: &str,
-        results: &mut Vec<FileInfo>,
-    ) -> Result<(), AppError> {
+    fn search_dir(dir: &Path, pattern: &str, results: &mut Vec<FileInfo>) -> Result<(), AppError> {
         for entry in fs::read_dir(dir).map_err(AppError::from)? {
             let entry = entry.map_err(AppError::from)?;
             let name = entry.file_name().to_string_lossy().to_string();
 
             if name.to_lowercase().contains(pattern) {
                 let metadata = entry.metadata().map_err(AppError::from)?;
-                let modified = metadata.modified()
+                let modified = metadata
+                    .modified()
                     .ok()
                     .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|d| d.as_secs().to_string());
@@ -213,9 +224,7 @@ pub async fn serial_list_dir(
 }
 
 #[tauri::command]
-pub fn serial_is_connected(
-    state: tauri::State<'_, super::serial::FlipperState>,
-) -> bool {
+pub fn serial_is_connected(state: tauri::State<'_, super::serial::FlipperState>) -> bool {
     super::serial::is_connected(&state)
 }
 
@@ -279,8 +288,7 @@ pub async fn serial_download(
 
 #[tauri::command]
 pub async fn local_read_file(path: String) -> Result<String, AppError> {
-    let bytes = fs::read(&path)
-        .map_err(|e| AppError::from(e))?;
+    let bytes = fs::read(&path).map_err(AppError::from)?;
     String::from_utf8(bytes)
         .map_err(|e| AppError::ParseError(format!("File is not valid UTF-8: {}", e)))
 }
@@ -291,11 +299,9 @@ pub async fn local_write_file(path: String, data: String) -> Result<bool, AppErr
     let path_obj = Path::new(&path);
     let temp_path = path_obj.with_extension("tmp");
 
-    fs::write(&temp_path, data.as_bytes())
-        .map_err(|e| AppError::from(e))?;
+    fs::write(&temp_path, data.as_bytes()).map_err(AppError::from)?;
 
-    fs::rename(&temp_path, path_obj)
-        .map_err(|e| AppError::from(e))?;
+    fs::rename(&temp_path, path_obj).map_err(AppError::from)?;
 
     Ok(true)
 }
@@ -320,20 +326,32 @@ pub fn fs_cache_file(app: tauri::AppHandle, path: String, data: Vec<u8>) -> Resu
 }
 
 #[tauri::command]
-pub fn fs_get_cached_file(app: tauri::AppHandle, path: String) -> Result<Option<Vec<u8>>, AppError> {
+pub fn fs_get_cached_file(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<Option<Vec<u8>>, AppError> {
     super::vfs::get_cached_file(&app, &path)
 }
 
 #[tauri::command]
-pub fn fs_insert_file(app: tauri::AppHandle, path: String, name: String, size: u64, is_dir: bool) -> Result<(), AppError> {
+pub fn fs_insert_file(
+    app: tauri::AppHandle,
+    path: String,
+    name: String,
+    size: u64,
+    is_dir: bool,
+) -> Result<(), AppError> {
     use super::commands::FileInfo;
-    super::vfs::insert_file(&app, &FileInfo {
-        path,
-        name,
-        size,
-        is_dir,
-        modified: None,
-    })
+    super::vfs::insert_file(
+        &app,
+        &FileInfo {
+            path,
+            name,
+            size,
+            is_dir,
+            modified: None,
+        },
+    )
 }
 
 #[tauri::command]
@@ -415,9 +433,9 @@ pub fn rename_file(path: String, new_name: String) -> Result<String, AppError> {
     if !src.exists() {
         return Err(AppError::NotFound(format!("File not found: {}", path)));
     }
-    let parent = src.parent().ok_or_else(|| {
-        AppError::General("Cannot determine parent directory".to_string())
-    })?;
+    let parent = src
+        .parent()
+        .ok_or_else(|| AppError::General("Cannot determine parent directory".to_string()))?;
     let new_path = parent.join(new_name);
     if new_path.exists() {
         return Err(AppError::AlreadyExists(format!(
@@ -451,7 +469,10 @@ pub fn copy_file(source: String, dest: String) -> Result<(), AppError> {
     }
     let dst = Path::new(&dest);
     if dst.exists() {
-        return Err(AppError::AlreadyExists(format!("Destination exists: {}", dest)));
+        return Err(AppError::AlreadyExists(format!(
+            "Destination exists: {}",
+            dest
+        )));
     }
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent).map_err(AppError::from)?;
@@ -474,7 +495,7 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
         if file_type.is_dir() {
             copy_dir_all(&entry.path(), &dest_path)?;
         } else {
-            fs::copy(&entry.path(), &dest_path)?;
+            fs::copy(entry.path(), &dest_path)?;
         }
     }
     Ok(())
@@ -483,8 +504,7 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
 #[tauri::command]
 pub fn get_file_content(path: String) -> Result<String, AppError> {
     let bytes = fs::read(&path).map_err(AppError::from)?;
-    String::from_utf8(bytes)
-        .map_err(|e| AppError::ParseError(format!("Not valid UTF-8: {}", e)))
+    String::from_utf8(bytes).map_err(|e| AppError::ParseError(format!("Not valid UTF-8: {}", e)))
 }
 
 #[tauri::command]
@@ -499,12 +519,12 @@ pub fn write_file_content(path: String, content: String) -> Result<(), AppError>
 
 #[tauri::command]
 pub fn get_app_paths() -> Result<serde_json::Value, AppError> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| AppError::General("Cannot find home directory".into()))?;
-    let desktop = dirs::desktop_dir()
-        .ok_or_else(|| AppError::General("No desktop directory".into()))?;
-    let documents = dirs::document_dir()
-        .ok_or_else(|| AppError::General("No documents directory".into()))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| AppError::General("Cannot find home directory".into()))?;
+    let desktop =
+        dirs::desktop_dir().ok_or_else(|| AppError::General("No desktop directory".into()))?;
+    let documents =
+        dirs::document_dir().ok_or_else(|| AppError::General("No documents directory".into()))?;
     Ok(serde_json::json!({
         "home": home.to_string_lossy(),
         "desktop": desktop.to_string_lossy(),
@@ -645,7 +665,10 @@ pub fn template_create(base_path: String, name: String, ext: String) -> Result<S
     let file_path = PathBuf::from(format!("{}/{}.{}", base_path, name, ext));
 
     if file_path.exists() {
-        return Err(AppError::AlreadyExists(format!("File already exists: {}", file_path.display())));
+        return Err(AppError::AlreadyExists(format!(
+            "File already exists: {}",
+            file_path.display()
+        )));
     }
 
     if let Some(parent) = file_path.parent() {

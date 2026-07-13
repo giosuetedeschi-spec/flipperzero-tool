@@ -29,15 +29,19 @@ fn test_create_file_already_exists() {
     let dir = std::env::temp_dir().join("flipper_test_dup");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir(&dir).unwrap();
-    std::fs::write(dir.join("testfile"), "existing").unwrap();
-    let r = create_file_from_template(dir.join("testfile").to_string_lossy().to_string(), "sub".to_string());
+    let path = dir.join("testfile").to_string_lossy().to_string();
+    create_file_from_template(path.clone(), "sub".to_string()).unwrap();
+    let r = create_file_from_template(path, "sub".to_string());
     assert!(r.is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn test_move_file_source_not_found() {
-    let r = move_file("/nonexistent/src.txt".to_string(), "/tmp/dst.txt".to_string());
+    let r = move_file(
+        "/nonexistent/src.txt".to_string(),
+        "/tmp/dst.txt".to_string(),
+    );
     assert!(r.is_err());
 }
 
@@ -48,14 +52,20 @@ fn test_move_file_dest_exists() {
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("src.txt"), "data").unwrap();
     std::fs::write(dir.join("dst.txt"), "existing").unwrap();
-    let r = move_file(dir.join("src.txt").to_string_lossy().to_string(), dir.join("dst.txt").to_string_lossy().to_string());
+    let r = move_file(
+        dir.join("src.txt").to_string_lossy().to_string(),
+        dir.join("dst.txt").to_string_lossy().to_string(),
+    );
     assert!(r.is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn test_copy_file_source_not_found() {
-    let r = copy_file("/nonexistent/src.txt".to_string(), "/tmp/dst.txt".to_string());
+    let r = copy_file(
+        "/nonexistent/src.txt".to_string(),
+        "/tmp/dst.txt".to_string(),
+    );
     assert!(r.is_err());
 }
 
@@ -100,7 +110,10 @@ fn test_write_file_content_success() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir(&dir).unwrap();
     let path = dir.join("test_output.txt");
-    let r = write_file_content(path.to_string_lossy().to_string(), "Hello Flipper".to_string());
+    let r = write_file_content(
+        path.to_string_lossy().to_string(),
+        "Hello Flipper".to_string(),
+    );
     assert!(r.is_ok());
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "Hello Flipper");
     let _ = std::fs::remove_dir_all(&dir);
@@ -118,7 +131,10 @@ fn test_rename_file_success() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("old.txt"), "data").unwrap();
-    let r = rename_file(dir.join("old.txt").to_string_lossy().to_string(), "new.txt".to_string());
+    let r = rename_file(
+        dir.join("old.txt").to_string_lossy().to_string(),
+        "new.txt".to_string(),
+    );
     assert!(r.is_ok());
     assert!(!dir.join("old.txt").exists());
     assert!(dir.join("new.txt").exists());

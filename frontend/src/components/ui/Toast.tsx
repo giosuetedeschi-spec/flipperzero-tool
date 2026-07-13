@@ -1,28 +1,14 @@
 import { useEffect, useState } from "react";
-
-export interface ToastMsg {
-  id: number;
-  text: string;
-  type: "success" | "error" | "info";
-}
-
-let toastId = 0;
-let addToastFn: ((msg: Omit<ToastMsg, "id">) => void) | null = null;
-
-export function showToast(text: string, type: "info" | "success" | "error" = "info") {
-  addToastFn?.({ text, type });
-}
+import { subscribeToasts, type ToastMsg } from "../../lib/toastStore";
 
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
 
   useEffect(() => {
-    addToastFn = (msg) => {
-      const id = ++toastId;
-      setToasts((prev) => [...prev, { ...msg, id }]);
-      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
-    };
-    return () => { addToastFn = null; };
+    return subscribeToasts((msg) => {
+      setToasts((prev) => [...prev, msg]);
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== msg.id)), 4000);
+    });
   }, []);
 
   const styles = {

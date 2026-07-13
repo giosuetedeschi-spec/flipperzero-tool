@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { parserParseSubStruct } from "../services/tauri";
+import { parserParseSubStruct, type SubGhzFile } from "../services/tauri";
 
 interface Props {
   content: string;
@@ -22,7 +22,7 @@ const PROTOCOL_DB: Record<string, ProtocolInfo> = {
 };
 
 export default function SubGhzViewerAdvanced({ content, fileName }: Props) {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<SubGhzFile | null>(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +30,8 @@ export default function SubGhzViewerAdvanced({ content, fileName }: Props) {
 
   useEffect(() => {
     parserParseSubStruct(content)
-      .then((result: any) => setData(result.fields?.[0] || result))
-      .catch((e: any) => setError(String(e)));
+      .then((result) => setData(result))
+      .catch((e) => setError(String(e)));
   }, [content]);
 
   // Auto-detect protocol
@@ -50,11 +50,10 @@ export default function SubGhzViewerAdvanced({ content, fileName }: Props) {
 
     // Different patterns for different protocols
     const pattern = data.protocol || "Unknown";
-    const freq = data.frequency || 433920000;
 
     for (let x = 0; x <= width; x++) {
       const cyclePos = (x / width) * 20; // 20 full cycles
-      let y = mid;
+      let y: number;
 
       if (pattern.includes("RAW")) {
         // Random-ish pattern for RAW
@@ -144,7 +143,7 @@ export default function SubGhzViewerAdvanced({ content, fileName }: Props) {
 
           {/* Labels */}
           <text x="8" y="14" fill="#6b7280" fontSize="9">{data.protocol || "Unknown"}</text>
-          <text x="8" y="26" fill="#6b7280" fontSize="8">{data.frequency_display || data.frequency}</text>
+          <text x="8" y="26" fill="#6b7280" fontSize="8">{data.frequency}</text>
         </svg>
       </div>
 
@@ -173,7 +172,7 @@ export default function SubGhzViewerAdvanced({ content, fileName }: Props) {
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="bg-gray-700/50 rounded p-2">
           <span className="text-gray-400">Frequency</span>
-          <div className="text-green-400 font-mono">{data.frequency_display || `${data.frequency} Hz`}</div>
+          <div className="text-green-400 font-mono">{`${data.frequency} Hz`}</div>
         </div>
         <div className="bg-gray-700/50 rounded p-2">
           <span className="text-gray-400">Bit Length</span>

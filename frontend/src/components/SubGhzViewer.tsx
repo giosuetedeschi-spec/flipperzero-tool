@@ -1,34 +1,23 @@
 import { useState, useEffect, useMemo } from "react";
-import { parserParseSubStruct } from "../services/tauri";
+import { parserParseSubStruct, type SubGhzFile } from "../services/tauri";
 
 interface Props {
   content: string;
   fileName: string;
 }
 
-interface SubGhzData {
-  filetype: string;
-  version: number;
-  frequency: number;
-  frequency_display: string;
-  preset: string;
-  protocol: string;
-  bit: number | null;
-  key: string;
-  is_raw: boolean;
+function displayFrequency(hz: number): string {
+  return hz >= 1_000_000 ? `${(hz / 1_000_000).toFixed(2)} MHz` : `${hz} Hz`;
 }
 
-export default function SubGhzViewer({ content, fileName }: Props) {
-  const [data, setData] = useState<SubGhzData | null>(null);
+export default function SubGhzViewer({ content }: Props) {
+  const [data, setData] = useState<SubGhzFile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     parserParseSubStruct(content)
-      .then((result: any) => {
-        // The structured result is in result.fields[0]
-        setData(result.fields?.[0] || result);
-      })
-      .catch((e: any) => setError(String(e)));
+      .then((result) => setData(result))
+      .catch((e) => setError(String(e)));
   }, [content]);
 
   // Generate waveform visualization based on protocol
@@ -62,7 +51,7 @@ export default function SubGhzViewer({ content, fileName }: Props) {
         />
         {/* Labels */}
         <text x="4" y="12" fill="#9ca3af" fontSize="8">{data.protocol}</text>
-        <text x={width - 60} y="12" fill="#9ca3af" fontSize="8">{data.frequency_display}</text>
+        <text x={width - 60} y="12" fill="#9ca3af" fontSize="8">{displayFrequency(data.frequency)}</text>
       </svg>
     );
   }, [data]);
@@ -81,7 +70,7 @@ export default function SubGhzViewer({ content, fileName }: Props) {
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="bg-gray-700/50 rounded p-2">
           <span className="text-gray-400">Frequency</span>
-          <div className="text-green-400 font-mono">{data.frequency_display}</div>
+          <div className="text-green-400 font-mono">{displayFrequency(data.frequency)}</div>
         </div>
         <div className="bg-gray-700/50 rounded p-2">
           <span className="text-gray-400">Protocol</span>

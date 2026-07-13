@@ -62,6 +62,9 @@ export function useDirectory(viewMode: "local" | "serial", serialConnected: bool
   // Reload on path/mode change
   useEffect(() => {
     if (serialConnected || viewMode === "local" || mockMode) {
+      // Standard fetch-on-mount/dep-change pattern; loadDirectory's setLoading(true)
+      // firing synchronously here is intentional, not a stray render loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadDirectory(currentPath);
     }
   }, [currentPath, viewMode, serialConnected, mockMode, loadDirectory]);

@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import { ufbt_is_installed, ufbt_get_version, ufbt_get_sdk_version, ufbt_install, ufbt_update } from '../services/tauri';
-import { showToast } from './ui/Toast';
+import { showToast } from '../lib/toastStore';
 
 export default function UfbtPanel() {
   const [installed, setInstalled] = useState(false);
   const [version, setVersion] = useState('');
   const [sdkVersion, setSdkVersion] = useState('');
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => { checkUfbt(); }, []);
 
   const checkUfbt = async () => {
     try {
@@ -23,6 +21,11 @@ export default function UfbtPanel() {
       showToast('Failed: ' + (err instanceof Error ? err.message : String(err)), 'error');
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount pattern
+    checkUfbt();
+  }, []);
 
   const handleInstall = async () => {
     setBusy(true);

@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::errors::AppError;
 
@@ -32,7 +32,8 @@ fn parse_key_value(raw: &str) -> Vec<(String, String)> {
 }
 
 fn fields_to_value(fields: &[(String, String)]) -> Vec<Value> {
-    fields.iter()
+    fields
+        .iter()
         .map(|(k, v)| json!({"key": k, "value": v}))
         .collect()
 }
@@ -70,28 +71,45 @@ pub fn parse_sub(raw: &str) -> Result<ParsedFile, AppError> {
 
     for (k, v) in &kvs {
         match k.as_str() {
-            "Filetype" => { filetype = v.clone(); }
-            "Version" => { version = v.parse().unwrap_or(0); }
+            "Filetype" => {
+                filetype = v.clone();
+            }
+            "Version" => {
+                version = v.parse().unwrap_or(0);
+            }
             "Frequency" => {
-                frequency = v.parse().map_err(|_| {
-                    AppError::ParseError(format!("Invalid frequency: {}", v))
-                })?;
+                frequency = v
+                    .parse()
+                    .map_err(|_| AppError::ParseError(format!("Invalid frequency: {}", v)))?;
             }
-            "Preset" => { preset = v.clone(); }
-            "Protocol" => { protocol = v.clone(); }
+            "Preset" => {
+                preset = v.clone();
+            }
+            "Protocol" => {
+                protocol = v.clone();
+            }
             "Bit" => {
-                bit = Some(v.parse().map_err(|_| {
-                    AppError::ParseError(format!("Invalid bit count: {}", v))
-                })?);
+                bit = Some(
+                    v.parse()
+                        .map_err(|_| AppError::ParseError(format!("Invalid bit count: {}", v)))?,
+                );
             }
-            "Key" => { key = v.clone(); }
-            "Raw_Data" | "Raw_Single_Data" => { raw_data = true; }
+            "Key" => {
+                key = v.clone();
+            }
+            "Raw_Data" | "Raw_Single_Data" => {
+                raw_data = true;
+            }
             _ => {}
         }
     }
 
-    fields.push(json!({"key": "filetype", "value": filetype}));
-    fields.push(json!({"key": "version", "value": version}));
+    if !filetype.is_empty() {
+        fields.push(json!({"key": "filetype", "value": filetype}));
+    }
+    if version > 0 {
+        fields.push(json!({"key": "version", "value": version}));
+    }
     if frequency > 0 {
         fields.push(json!({"key": "frequency", "value": frequency}));
     }
@@ -113,8 +131,17 @@ pub fn parse_sub(raw: &str) -> Result<ParsedFile, AppError> {
 
     // Add any remaining unknown fields
     for (k, v) in &kvs {
-        let known = ["Filetype", "Version", "Frequency", "Preset", "Protocol",
-                     "Bit", "Key", "Raw_Data", "Raw_Single_Data"];
+        let known = [
+            "Filetype",
+            "Version",
+            "Frequency",
+            "Preset",
+            "Protocol",
+            "Bit",
+            "Key",
+            "Raw_Data",
+            "Raw_Single_Data",
+        ];
         if !known.contains(&k.as_str()) {
             fields.push(json!({"key": k, "value": v}));
         }
@@ -157,12 +184,24 @@ pub fn parse_ir(raw: &str) -> Result<ParsedFile, AppError> {
 
     for (k, v) in &kvs {
         match k.as_str() {
-            "Filetype" => { filetype = v.clone(); }
-            "Version" => { version = v.parse().unwrap_or(0); }
-            "Protocol" => { protocol = v.clone(); }
-            "Address" => { address = v.clone(); }
-            "Command" => { command = v.clone(); }
-            "Raw_Data" => { raw_data = true; }
+            "Filetype" => {
+                filetype = v.clone();
+            }
+            "Version" => {
+                version = v.parse().unwrap_or(0);
+            }
+            "Protocol" => {
+                protocol = v.clone();
+            }
+            "Address" => {
+                address = v.clone();
+            }
+            "Command" => {
+                command = v.clone();
+            }
+            "Raw_Data" => {
+                raw_data = true;
+            }
             k if k.starts_with("Button_") => {
                 // Multi-button format: Button_1, Button_1_Protocol, etc.
                 current_btn = v.clone();
@@ -239,11 +278,21 @@ pub fn parse_nfc(raw: &str) -> Result<ParsedFile, AppError> {
 
     for (k, v) in &kvs {
         match k.as_str() {
-            "Filetype" => { filetype = v.clone(); }
-            "Version" => { version = v.parse().unwrap_or(0); }
-            "Device Type" | "DeviceType" => { device_type = v.clone(); }
-            "UID" => { uid = v.clone(); }
-            "ATQA" => { atqa = v.clone(); }
+            "Filetype" => {
+                filetype = v.clone();
+            }
+            "Version" => {
+                version = v.parse().unwrap_or(0);
+            }
+            "Device Type" | "DeviceType" => {
+                device_type = v.clone();
+            }
+            "UID" => {
+                uid = v.clone();
+            }
+            "ATQA" => {
+                atqa = v.clone();
+            }
             "SAK" => {
                 sak = u8::from_str_radix(v.trim_start_matches("0x"), 16)
                     .unwrap_or_else(|_| v.parse().unwrap_or(0));
@@ -274,8 +323,15 @@ pub fn parse_nfc(raw: &str) -> Result<ParsedFile, AppError> {
     }
 
     // Add unknown fields
-    let known = ["Filetype", "Version", "Device Type", "DeviceType",
-                 "UID", "ATQA", "SAK"];
+    let known = [
+        "Filetype",
+        "Version",
+        "Device Type",
+        "DeviceType",
+        "UID",
+        "ATQA",
+        "SAK",
+    ];
     for (k, v) in &kvs {
         if !known.contains(&k.as_str()) && !k.starts_with("Sector") && !k.starts_with("Block") {
             fields.push(json!({"key": k, "value": v}));
@@ -301,7 +357,6 @@ pub fn parse_generic(raw: &str) -> ParsedFile {
         raw_preview: preview(raw),
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Structured parser types (P3)
@@ -351,7 +406,11 @@ impl From<SubGhzFile> for ParsedFile {
         ParsedFile {
             file_type: "subghz".to_string(),
             fields,
-            raw_preview: format!("Frequency: {} | Protocol: {}", s.display_frequency(), s.protocol),
+            raw_preview: format!(
+                "Frequency: {} | Protocol: {}",
+                s.display_frequency(),
+                s.protocol
+            ),
         }
     }
 }
@@ -439,7 +498,9 @@ impl From<NfcFile> for ParsedFile {
             raw_preview: format!("Type: {} | UID: {}", nfc.device_type, nfc.uid),
         }
     }
+}
 
+impl ParsedFile {
     /// Parse SubGhz into structured type.
     pub fn parse_sub_struct(raw: &str) -> Result<SubGhzFile, AppError> {
         let kvs = parse_key_value(raw);
@@ -453,24 +514,40 @@ impl From<NfcFile> for ParsedFile {
         let mut is_raw = false;
         let mut extra = Vec::new();
 
-        let known = ["Filetype", "Version", "Frequency", "Preset", "Protocol",
-                     "Bit", "Key", "Raw_Data", "Raw_Single_Data"];
-
         for (k, v) in &kvs {
             match k.as_str() {
                 "Filetype" => filetype = v.clone(),
                 "Version" => version = v.parse().unwrap_or(0),
-                "Frequency" => frequency = v.parse().map_err(|_| AppError::ParseError(format!("Invalid frequency: {}", v)))?,
+                "Frequency" => {
+                    frequency = v
+                        .parse()
+                        .map_err(|_| AppError::ParseError(format!("Invalid frequency: {}", v)))?
+                }
                 "Preset" => preset = v.clone(),
                 "Protocol" => protocol = v.clone(),
-                "Bit" => bit = Some(v.parse().map_err(|_| AppError::ParseError(format!("Invalid bit: {}", v)))?),
+                "Bit" => {
+                    bit = Some(
+                        v.parse()
+                            .map_err(|_| AppError::ParseError(format!("Invalid bit: {}", v)))?,
+                    )
+                }
                 "Key" => key = v.clone(),
                 "Raw_Data" | "Raw_Single_Data" => is_raw = true,
                 _ => extra.push((k.clone(), v.clone())),
             }
         }
 
-        Ok(SubGhzFile { filetype, version, frequency, preset, protocol, bit, key, is_raw, extra })
+        Ok(SubGhzFile {
+            filetype,
+            version,
+            frequency,
+            preset,
+            protocol,
+            bit,
+            key,
+            is_raw,
+            extra,
+        })
     }
 
     /// Parse IR into structured type.
@@ -486,7 +563,11 @@ impl From<NfcFile> for ParsedFile {
         let mut extra = Vec::new();
 
         // Collect button data
-        let mut btn_map: std::collections::HashMap<String, IrButton> = std::collections::HashMap::new();
+        let mut btn_map: std::collections::HashMap<String, IrButton> =
+            std::collections::HashMap::new();
+        let known_ir_keys = [
+            "Filetype", "Version", "Protocol", "Address", "Command", "Raw_Data",
+        ];
 
         for (k, v) in &kvs {
             match k.as_str() {
@@ -537,10 +618,18 @@ impl From<NfcFile> for ParsedFile {
             }
         }
 
-        let known_ir_keys = ["Filetype", "Version", "Protocol", "Address", "Command", "Raw_Data"];
         buttons.extend(btn_map.into_values());
 
-        Ok(IrFile { filetype, version, protocol, address, command, buttons, is_raw, extra })
+        Ok(IrFile {
+            filetype,
+            version,
+            protocol,
+            address,
+            command,
+            buttons,
+            is_raw,
+            extra,
+        })
     }
 
     /// Parse NFC into structured type.
@@ -552,10 +641,8 @@ impl From<NfcFile> for ParsedFile {
         let mut uid = String::new();
         let mut atqa = String::new();
         let mut sak = 0u8;
-        let mut sectors = Vec::new();
+        let sectors = Vec::new();
         let mut extra = Vec::new();
-
-        let known = ["Filetype", "Version", "Device Type", "DeviceType", "UID", "ATQA", "SAK"];
 
         for (k, v) in &kvs {
             match k.as_str() {
@@ -576,6 +663,15 @@ impl From<NfcFile> for ParsedFile {
             }
         }
 
-        Ok(NfcFile { filetype, version, device_type, uid, atqa, sak, sectors, extra })
+        Ok(NfcFile {
+            filetype,
+            version,
+            device_type,
+            uid,
+            atqa,
+            sak,
+            sectors,
+            extra,
+        })
     }
-
+}

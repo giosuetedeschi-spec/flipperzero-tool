@@ -1,6 +1,6 @@
 //! Tests for serial module (varint framing, base64, CLI parsing)
 
-use flipperzero_tool_lib::serial::{encode_varint, read_varint, base64_encode, parse_list_output, FileInfo};
+use flipperzero_tool_lib::serial::{base64_encode, encode_varint, parse_list_output, read_varint};
 use std::time::Duration;
 
 // === Varint tests ===
@@ -21,7 +21,10 @@ fn test_varint_single_byte() {
         encode_varint(&mut buf, val);
         assert_eq!(buf.len(), 1);
         let mut reader = &buf[..];
-        assert_eq!(read_varint(&mut reader, Duration::from_secs(1)).unwrap(), val);
+        assert_eq!(
+            read_varint(&mut reader, Duration::from_secs(1)).unwrap(),
+            val
+        );
     }
 }
 
@@ -32,7 +35,10 @@ fn test_varint_two_bytes() {
         encode_varint(&mut buf, val);
         assert_eq!(buf.len(), 2);
         let mut reader = &buf[..];
-        assert_eq!(read_varint(&mut reader, Duration::from_secs(1)).unwrap(), val);
+        assert_eq!(
+            read_varint(&mut reader, Duration::from_secs(1)).unwrap(),
+            val
+        );
     }
 }
 
@@ -43,7 +49,10 @@ fn test_varint_three_bytes() {
         encode_varint(&mut buf, val);
         assert!(buf.len() >= 2 && buf.len() <= 3);
         let mut reader = &buf[..];
-        assert_eq!(read_varint(&mut reader, Duration::from_secs(1)).unwrap(), val);
+        assert_eq!(
+            read_varint(&mut reader, Duration::from_secs(1)).unwrap(),
+            val
+        );
     }
 }
 
@@ -53,7 +62,10 @@ fn test_varint_large() {
     let mut buf = Vec::new();
     encode_varint(&mut buf, val);
     let mut reader = &buf[..];
-    assert_eq!(read_varint(&mut reader, Duration::from_secs(1)).unwrap(), val);
+    assert_eq!(
+        read_varint(&mut reader, Duration::from_secs(1)).unwrap(),
+        val
+    );
 }
 
 #[test]
@@ -62,7 +74,10 @@ fn test_varint_max() {
     let mut buf = Vec::new();
     encode_varint(&mut buf, val);
     let mut reader = &buf[..];
-    assert_eq!(read_varint(&mut reader, Duration::from_secs(1)).unwrap(), val);
+    assert_eq!(
+        read_varint(&mut reader, Duration::from_secs(1)).unwrap(),
+        val
+    );
 }
 
 #[test]
@@ -72,7 +87,10 @@ fn test_varint_roundtrip_random() {
         let mut buf = Vec::new();
         encode_varint(&mut buf, val);
         let mut reader = &buf[..];
-        assert_eq!(read_varint(&mut reader, Duration::from_secs(1)).unwrap(), val);
+        assert_eq!(
+            read_varint(&mut reader, Duration::from_secs(1)).unwrap(),
+            val
+        );
     }
 }
 

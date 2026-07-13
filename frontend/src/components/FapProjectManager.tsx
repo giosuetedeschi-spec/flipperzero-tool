@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ufbt_create, ufbt_build, ufbt_deploy, ufbt_clean } from '../services/tauri';
-import { showToast } from './ui/Toast';
+import { showToast } from '../lib/toastStore';
 
 interface Project { name: string; path: string; }
 

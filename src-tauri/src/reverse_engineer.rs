@@ -9,7 +9,6 @@
 //!   - Protobuf candidate generation
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // Data structures
@@ -20,7 +19,7 @@ pub struct PatternMatch {
     pub offset: usize,
     pub length: usize,
     pub pattern: Vec<u8>,
-    pub confidence: f64,  // 0.0 - 1.0
+    pub confidence: f64, // 0.0 - 1.0
     pub description: String,
 }
 
@@ -48,7 +47,7 @@ pub struct AnalysisResult {
 pub struct FieldCandidate {
     pub offset: usize,
     pub length: usize,
-    pub field_type: String,  // "header", "length", "payload", "checksum", "unknown"
+    pub field_type: String, // "header", "length", "payload", "checksum", "unknown"
     pub confidence: f64,
     pub value_hex: String,
     pub value_dec: Option<u64>,
@@ -187,8 +186,10 @@ pub fn find_patterns(data: &[u8], min_len: usize, max_len: usize) -> Vec<Pattern
         }
     }
 
-    // Deduplicate: keep highest confidence for each offset
-    patterns.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+    // Deduplicate: keep highest confidence for each offset.
+    // total_cmp (not partial_cmp) so a NaN confidence (e.g. from a 0-length
+    // input reaching the division above) can't panic the sort.
+    patterns.sort_by(|a, b| b.confidence.total_cmp(&a.confidence));
     let mut seen = std::collections::HashSet::new();
     patterns.retain(|p| seen.insert(p.offset));
 
@@ -213,10 +214,11 @@ pub fn fingerprint_protocols(data: &[u8]) -> Vec<ProtocolFingerprint> {
             continue;
         }
 
-        if data.len() >= proto.offset + proto.signature.len() {
-            if &data[proto.offset..proto.offset + proto.signature.len()] == proto.signature.as_slice() {
-                matches.push(proto);
-            }
+        if data.len() >= proto.offset + proto.signature.len()
+            && &data[proto.offset..proto.offset + proto.signature.len()]
+                == proto.signature.as_slice()
+        {
+            matches.push(proto);
         }
     }
 
@@ -300,7 +302,9 @@ pub fn infer_structure(data: &[u8]) -> Vec<FieldCandidate> {
     if n >= 4 {
         let last = data[n - 1];
         let xor_checksum: u8 = data[..n - 1].iter().fold(0, |acc, &b| acc ^ b);
-        let sum_checksum: u8 = data[..n - 1].iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
+        let sum_checksum: u8 = data[..n - 1]
+            .iter()
+            .fold(0u8, |acc, &b| acc.wrapping_add(b));
 
         if last == xor_checksum {
             fields.push(FieldCandidate {
@@ -335,7 +339,9 @@ pub fn analyze(data: &[u8]) -> AnalysisResult {
     let entropy = calculate_entropy(data);
     let unique_bytes = {
         let mut seen = std::collections::HashSet::new();
-        data.iter().for_each(|&b| { seen.insert(b); });
+        data.iter().for_each(|&b| {
+            seen.insert(b);
+        });
         seen.len()
     };
 
@@ -343,15 +349,23 @@ pub fn analyze(data: &[u8]) -> AnalysisResult {
     let matched_protocols = fingerprint_protocols(data);
     let inferred_structure = infer_structure(data);
 
-    let hex_preview = data.iter()
+    let hex_preview = data
+        .iter()
         .take(64)
         .map(|b| format!("{:02X}", b))
         .collect::<Vec<_>>()
         .join(" ");
 
-    let ascii_preview = data.iter()
+    let ascii_preview = data
+        .iter()
         .take(64)
-        .map(|&b| if b >= 32 && b < 127 { b as char } else { '.' })
+        .map(|&b| {
+            if (32..127).contains(&b) {
+                b as char
+            } else {
+                '.'
+            }
+        })
         .collect::<String>();
 
     AnalysisResult {
@@ -373,8 +387,7 @@ pub fn analyze(data: &[u8]) -> AnalysisResult {
 #[tauri::command]
 pub fn reverse_engineer_analyze(hex_data: String) -> Result<AnalysisResult, String> {
     // Decode hex string to bytes
-    let bytes = decode_hex(&hex_data)
-        .map_err(|e| format!("Hex decode error: {}", e))?;
+    let bytes = decode_hex(&hex_data).map_err(|e| format!("Hex decode error: {}", e))?;
 
     Ok(analyze(&bytes))
 }
@@ -382,15 +395,14 @@ pub fn reverse_engineer_analyze(hex_data: String) -> Result<AnalysisResult, Stri
 #[tauri::command]
 pub fn reverse_engineer_analyze_file(path: String) -> Result<AnalysisResult, String> {
     use std::fs;
-    let bytes = fs::read(&path)
-        .map_err(|e| format!("File read error: {}", e))?;
+    let bytes = fs::read(&path).map_err(|e| format!("File read error: {}", e))?;
 
     Ok(analyze(&bytes))
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
     let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("Hex string must have even length".to_string());
     }
 
@@ -399,4 +411,54 @@ fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
         .collect::<Result<Vec<u8>, _>>()
         .map_err(|e| format!("Invalid hex: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_patterns_does_not_panic_on_nan_confidence() {
+        // Regression test: sort_by used to call .partial_cmp().unwrap(),
+        // which panics if any confidence value is NaN. total_cmp doesn't.
+        let mut patterns = vec![
+            PatternMatch {
+                offset: 0,
+                length: 2,
+                pattern: vec![1, 2],
+                confidence: f64::NAN,
+                description: String::new(),
+            },
+            PatternMatch {
+                offset: 2,
+                length: 2,
+                pattern: vec![3, 4],
+                confidence: 0.5,
+                description: String::new(),
+            },
+        ];
+        patterns.sort_by(|a, b| b.confidence.total_cmp(&a.confidence));
+        assert_eq!(patterns.len(), 2);
+    }
+
+    #[test]
+    fn test_find_patterns_repeating_sequence() {
+        let data = [0xAAu8, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB];
+        let patterns = find_patterns(&data, 2, 4);
+        assert!(!patterns.is_empty());
+    }
+
+    #[test]
+    fn test_find_patterns_no_repetition() {
+        let data = [1u8, 2, 3, 4, 5, 6, 7, 8];
+        let patterns = find_patterns(&data, 2, 4);
+        assert!(patterns.is_empty());
+    }
+
+    #[test]
+    fn test_find_patterns_short_input_returns_empty() {
+        let data = [1u8, 2];
+        let patterns = find_patterns(&data, 2, 4);
+        assert!(patterns.is_empty());
+    }
 }

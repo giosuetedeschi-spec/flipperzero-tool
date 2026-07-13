@@ -1,19 +1,19 @@
 import { useState, useEffect } from "react";
-import { parserParseNfcStruct } from "../services/tauri";
+import { parserParseNfcStruct, type NfcFile } from "../services/tauri";
 
 interface Props {
   content: string;
   fileName: string;
 }
 
-export default function NfcViewer({ content, fileName }: Props) {
-  const [data, setData] = useState<any>(null);
+export default function NfcViewer({ content }: Props) {
+  const [data, setData] = useState<NfcFile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     parserParseNfcStruct(content)
-      .then((result: any) => setData(result.fields?.[0] || result))
-      .catch((e: any) => setError(String(e)));
+      .then((result) => setData(result))
+      .catch((e) => setError(String(e)));
   }, [content]);
 
   if (error) return <div className="text-red-400 text-xs p-2">Parse error: {error}</div>;
@@ -60,7 +60,7 @@ export default function NfcViewer({ content, fileName }: Props) {
         <div className="space-y-1">
           <span className="text-gray-400 text-xs">Sectors ({data.sectors.length})</span>
           <div className="max-h-32 overflow-y-auto space-y-1">
-            {data.sectors.map((sector: any, i: number) => (
+            {data.sectors.map((sector, i) => (
               <div key={i} className="bg-gray-700/50 rounded p-2 text-xs">
                 <span className="text-gray-300">Sector {sector.index}</span>
               </div>

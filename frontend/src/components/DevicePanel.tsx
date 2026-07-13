@@ -37,6 +37,7 @@ export default function DevicePanel({ onConnectionChange, mockMode = false }: Pr
   }, [selectedPort]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount pattern
     refreshPorts();
     // Check connection status periodically
     const interval = setInterval(async () => {

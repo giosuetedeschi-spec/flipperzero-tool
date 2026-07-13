@@ -7,7 +7,8 @@ import FileTable from "./components/FileTable";
 import EditorPanel from "./components/EditorPanel";
 import NewFileModal from "./components/NewFileModal";
 import DevicePanel from "./components/DevicePanel";
-import { ToastContainer, showToast } from "./components/ui/Toast";
+import { ToastContainer } from "./components/ui/Toast";
+import { showToast } from "./lib/toastStore";
 
 type ViewMode = "local" | "serial";
 
