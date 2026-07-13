@@ -68,7 +68,7 @@ export default function CodeMirrorEditor({ value, onChange, language, readOnly }
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         oneDark,
         languageExt,
-        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...lintKeymap] as any),
+        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...completionKeymap, ...lintKeymap]),
         updateListener,
         EditorView.theme({
           "&": { height: "100%", fontSize: "13px" },

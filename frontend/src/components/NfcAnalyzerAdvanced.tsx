@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { parserParseNfcStruct } from "../services/tauri";
+import { parserParseNfcStruct, type NfcFile, type NfcSector, type NfcBlock } from "../services/tauri";
 
 interface Props {
   content: string;
@@ -7,8 +7,8 @@ interface Props {
 }
 
 // Mifare Classic sector/block helper
-function parseMifareBlocks(uid: string, rawContent: string): { sectors: any[], hexDump: string[] } {
-  const sectors: any[] = [];
+function parseMifareBlocks(uid: string, rawContent: string): { sectors: NfcSector[], hexDump: string[] } {
+  const sectors: NfcSector[] = [];
   const hexDump: string[] = [];
 
   // Generate a basic hex dump from the raw content
@@ -25,12 +25,12 @@ function parseMifareBlocks(uid: string, rawContent: string): { sectors: any[], h
 
   // Parse sector info from raw content
   const lines = rawContent.split('\\n');
-  let currentSector: any = { blocks: [] };
+  let currentSector: { index?: number; blocks: NfcBlock[] } = { blocks: [] };
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith('Sector')) {
-      if (currentSector.index !== undefined) sectors.push(currentSector);
+      if (currentSector.index !== undefined) sectors.push(currentSector as NfcSector);
       const idx = parseInt(trimmed.replace('Sector', '').trim()) || sectors.length;
       currentSector = { index: idx, blocks: [] };
     } else if (trimmed.startsWith('Block')) {
@@ -42,7 +42,7 @@ function parseMifareBlocks(uid: string, rawContent: string): { sectors: any[], h
       }
     }
   }
-  if (currentSector.index !== undefined) sectors.push(currentSector);
+  if (currentSector.index !== undefined) sectors.push(currentSector as NfcSector);
 
   return { sectors, hexDump };
 }
@@ -72,14 +72,14 @@ function analyzeUid(uid: string): { manufacturer: string; type: string; bytes: s
 }
 
 export default function NfcAnalyzerAdvanced({ content, fileName }: Props) {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<NfcFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHex, setShowHex] = useState(false);
 
   useEffect(() => {
     parserParseNfcStruct(content)
-      .then((result: any) => setData(result.fields?.[0] || result))
-      .catch((e: any) => setError(String(e)));
+      .then((result) => setData(result))
+      .catch((e) => setError(String(e)));
   }, [content]);
 
   if (error) return <div className="text-red-400 text-xs p-2">Parse error: {error}</div>;
@@ -140,13 +140,13 @@ export default function NfcAnalyzerAdvanced({ content, fileName }: Props) {
         <div className="space-y-1">
           <span className="text-gray-400 text-xs">Sectors ({sectors.length})</span>
           <div className="max-h-40 overflow-y-auto space-y-1">
-            {sectors.map((sector: any, i: number) => (
+            {sectors.map((sector, i) => (
               <div key={i} className="bg-gray-700/50 rounded p-2 text-xs">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-gray-300 font-bold">Sector {sector.index}</span>
                   <span className="text-gray-500">{sector.blocks?.length || 0} blocks</span>
                 </div>
-                {sector.blocks?.map((block: any, j: number) => (
+                {sector.blocks?.map((block, j) => (
                   <div key={j} className="font-mono text-[10px] text-gray-400 flex gap-2">
                     <span className="text-gray-600">B{block.index}</span>
                     <span className={block.readable ? "text-green-400" : "text-red-400"}>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { parserParseIrStruct } from "../services/tauri";
+import { parserParseIrStruct, type IrFile } from "../services/tauri";
 
 interface Props {
   content: string;
@@ -72,14 +72,14 @@ function toProntoHex(protocol: string, address: string, command: string): string
 }
 
 export default function IrDatabase({ content, fileName }: Props) {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<IrFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPronto, setShowPronto] = useState(false);
 
   useEffect(() => {
     parserParseIrStruct(content)
-      .then((result: any) => setData(result.fields?.[0] || result))
-      .catch((e: any) => setError(String(e)));
+      .then((result) => setData(result))
+      .catch((e) => setError(String(e)));
   }, [content]);
 
   // Match against database
@@ -126,7 +126,7 @@ export default function IrDatabase({ content, fileName }: Props) {
             Database Matches ({matches.length})
           </div>
           <div className="max-h-32 overflow-y-auto space-y-1">
-            {matches.map((match: any, i: number) => (
+            {matches.map((match, i) => (
               <div key={i} className="bg-gray-700/50 rounded p-2 text-xs flex justify-between">
                 <div>
                   <span className="text-orange-300">{match.brand}</span>

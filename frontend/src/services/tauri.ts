@@ -254,16 +254,68 @@ export interface TransferProgress {
 // Structured parser commands (P3)
 // ---------------------------------------------------------------------------
 
-export async function parserParseSubStruct(data: string): Promise<any> {
-  return invoke<any>("parser_parse_sub_struct", { data });
+export interface SubGhzFile {
+  filetype: string;
+  version: number;
+  frequency: number;
+  preset: string;
+  protocol: string;
+  bit: number | null;
+  key: string;
+  is_raw: boolean;
+  extra: [string, string][];
 }
 
-export async function parserParseIrStruct(data: string): Promise<any> {
-  return invoke<any>("parser_parse_ir_struct", { data });
+export interface IrButton {
+  name: string;
+  protocol: string;
+  address: string;
+  command: string;
 }
 
-export async function parserParseNfcStruct(data: string): Promise<any> {
-  return invoke<any>("parser_parse_nfc_struct", { data });
+export interface IrFile {
+  filetype: string;
+  version: number;
+  protocol: string;
+  address: string;
+  command: string;
+  buttons: IrButton[];
+  is_raw: boolean;
+  extra: [string, string][];
+}
+
+export interface NfcBlock {
+  index: number;
+  data: string;
+  readable: boolean;
+}
+
+export interface NfcSector {
+  index: number;
+  blocks: NfcBlock[];
+}
+
+export interface NfcFile {
+  filetype: string;
+  version: number;
+  device_type: string;
+  uid: string;
+  atqa: string;
+  sak: number;
+  sectors: NfcSector[];
+  extra: [string, string][];
+}
+
+export async function parserParseSubStruct(data: string): Promise<SubGhzFile> {
+  return invoke<SubGhzFile>("parser_parse_sub_struct", { data });
+}
+
+export async function parserParseIrStruct(data: string): Promise<IrFile> {
+  return invoke<IrFile>("parser_parse_ir_struct", { data });
+}
+
+export async function parserParseNfcStruct(data: string): Promise<NfcFile> {
+  return invoke<NfcFile>("parser_parse_nfc_struct", { data });
 }
 
 // ---------------------------------------------------------------------------
