@@ -1,5 +1,4 @@
 import { type FileInfo } from "../services/tauri";
-import { isEditable } from "../hooks/useEditor";
 import SubGhzViewer from "./SubGhzViewer";
 import IrViewer from "./IrViewer";
 import NfcViewer from "./NfcViewer";

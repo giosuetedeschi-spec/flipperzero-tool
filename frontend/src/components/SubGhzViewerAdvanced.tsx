@@ -50,11 +50,10 @@ export default function SubGhzViewerAdvanced({ content, fileName }: Props) {
 
     // Different patterns for different protocols
     const pattern = data.protocol || "Unknown";
-    const freq = data.frequency || 433920000;
 
     for (let x = 0; x <= width; x++) {
       const cyclePos = (x / width) * 20; // 20 full cycles
-      let y = mid;
+      let y: number;
 
       if (pattern.includes("RAW")) {
         // Random-ish pattern for RAW

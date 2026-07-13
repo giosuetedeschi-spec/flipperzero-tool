@@ -85,14 +85,7 @@ export default function IrDatabase({ content, fileName }: Props) {
   // Match against database
   const matches = useMemo(() => {
     if (!data?.protocol) return [];
-    const db = IR_DB[data.protocol] || [];
-    const addr = data.address || "";
-    const cmd = data.command || "";
-
-    return db.filter(entry => {
-      // Simple matching based on address/command patterns
-      return true; // Show all matches for the protocol
-    });
+    return IR_DB[data.protocol] || [];
   }, [data]);
 
   const prontoHex = useMemo(() => {

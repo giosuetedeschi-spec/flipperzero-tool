@@ -55,22 +55,22 @@ function getErrorMessage(error: AppError | string | unknown): string {
 
 export async function listDirectory(path: string): Promise<FileInfo[]> {
   try { return await invoke<FileInfo[]>("list_directory", { path }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function moveFile(source: string, dest: string): Promise<void> {
   try { await invoke("move_file", { source, dest }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function findFiles(path: string, pattern: string): Promise<FileInfo[]> {
   try { return await invoke<FileInfo[]>("find_files", { path, pattern }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function createFileFromTemplate(path: string, ext: string): Promise<string> {
   try { return await invoke<string>("create_file_from_template", { path, ext }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 // ---------------------------------------------------------------------------
@@ -79,27 +79,27 @@ export async function createFileFromTemplate(path: string, ext: string): Promise
 
 export async function rename_file(path: string, new_name: string): Promise<string> {
   try { return await invoke<string>("rename_file", { path, new_name }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function delete_file(path: string): Promise<void> {
   try { await invoke("delete_file", { path }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function copy_file(source: string, dest: string): Promise<void> {
   try { await invoke("copy_file", { source, dest }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function get_file_content(path: string): Promise<string> {
   try { return await invoke<string>("get_file_content", { path }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function write_file_content(path: string, data: string): Promise<void> {
   try { await invoke("write_file_content", { path, data }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function get_app_paths(): Promise<{ home: string; desktop: string; documents: string }> {
@@ -107,7 +107,7 @@ export async function get_app_paths(): Promise<{ home: string; desktop: string; 
     const result = await invoke<{ home: string; desktop: string; documents: string }>("get_app_paths");
     return result;
   } catch (error) {
-    throw new Error(getErrorMessage(error as AppError | string));
+    throw new Error(getErrorMessage(error as AppError | string), { cause: error });
   }
 }
 
@@ -117,12 +117,12 @@ export async function get_app_paths(): Promise<{ home: string; desktop: string; 
 
 export async function localReadFile(path: string): Promise<string> {
   try { return await invoke<string>("local_read_file", { path }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function localWriteFile(path: string, data: string): Promise<boolean> {
   try { return await invoke<boolean>("local_write_file", { path, data }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 // ---------------------------------------------------------------------------
@@ -131,32 +131,32 @@ export async function localWriteFile(path: string, data: string): Promise<boolea
 
 export async function serialListPorts(): Promise<PortInfo[]> {
   try { return await invoke<PortInfo[]>("serial_list_ports"); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function serialConnect(port: string): Promise<boolean> {
   try { return await invoke<boolean>("serial_connect", { port }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function serialDisconnect(): Promise<boolean> {
   try { return await invoke<boolean>("serial_disconnect"); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function serialReadFile(path: string): Promise<string> {
   try { return await invoke<string>("serial_read_file", { path }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function serialWriteFile(path: string, data: string): Promise<boolean> {
   try { return await invoke<boolean>("serial_write_file", { path, data }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function serialListDir(path: string): Promise<FileInfo[]> {
   try { return await invoke<FileInfo[]>("serial_list_dir", { path }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function serialIsConnected(): Promise<boolean> {
@@ -166,31 +166,31 @@ export async function serialIsConnected(): Promise<boolean> {
 
 // uFBT commands (FASE 4)
 export async function ufbt_is_installed(): Promise<boolean> {
-  try { return await invoke<boolean>("ufbt_is_installed"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<boolean>("ufbt_is_installed"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_get_version(): Promise<string> {
-  try { return await invoke<string>("ufbt_get_version"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_get_version"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_get_sdk_version(): Promise<string> {
-  try { return await invoke<string>("ufbt_get_sdk_version"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_get_sdk_version"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_install(): Promise<string> {
-  try { return await invoke<string>("ufbt_install"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_install"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_update(): Promise<string> {
-  try { return await invoke<string>("ufbt_update"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_update"); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_create(name: string, path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_create", { name, path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_create", { name, path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_build(path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_build", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_build", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_deploy(path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_deploy", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_deploy", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 export async function ufbt_clean(path: string): Promise<string> {
-  try { return await invoke<string>("ufbt_clean", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string)); }
+  try { return await invoke<string>("ufbt_clean", { path }); } catch (e: unknown) { throw new Error(getErrorMessage(e as AppError | string), { cause: e }); }
 }
 
 
@@ -324,10 +324,10 @@ export interface AnalysisResult {
 
 export async function reverseEngineerAnalyze(hexData: string): Promise<AnalysisResult> {
   try { return await invoke<AnalysisResult>("reverse_engineer_analyze", { hexData }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
 
 export async function reverseEngineerAnalyzeFile(path: string): Promise<AnalysisResult> {
   try { return await invoke<AnalysisResult>("reverse_engineer_analyze_file", { path }); }
-  catch (error) { throw new Error(getErrorMessage(error as AppError | string)); }
+  catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }

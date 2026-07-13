@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 
 interface Props {
   contentA: string;
@@ -17,7 +17,6 @@ interface DiffLine {
 
 // Simple LCS-based diff
 function computeDiff(linesA: string[], linesB: string[]): DiffLine[] {
-  const result: DiffLine[] = [];
   const m = linesA.length;
   const n = linesB.length;
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { type FileInfo } from "../services/tauri";
 
 interface DragState {
@@ -8,7 +8,6 @@ interface DragState {
 
 export function useDragDrop(onDrop: (file: FileInfo, targetPath: string) => void) {
   const [dragState, setDragState] = useState<DragState>({ isDragging: false, draggedFile: null });
-  const dragRef = useRef<HTMLDivElement | null>(null);
 
   const handleDragStart = useCallback((file: FileInfo, e: React.DragEvent) => {
     e.dataTransfer.setData("application/json", JSON.stringify(file));

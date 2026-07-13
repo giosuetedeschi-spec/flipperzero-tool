@@ -56,8 +56,10 @@ export function useEditor(viewMode: "local" | "serial", mockMode = false) {
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewModeRef = useRef(viewMode);
   const mockModeRef = useRef(mockMode);
-  viewModeRef.current = viewMode;
-  mockModeRef.current = mockMode;
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+    mockModeRef.current = mockMode;
+  }, [viewMode, mockMode]);
 
   // ---- Tab management ----
 
@@ -98,7 +100,7 @@ export function useEditor(viewMode: "local" | "serial", mockMode = false) {
         );
         return { ...prev, tabs };
       });
-    } catch (err) {
+    } catch {
       setState(prev => {
         const tabs = prev.tabs.map((t, i) =>
           i === prev.activeTabIndex ? { ...t, loading: false } : t
@@ -121,25 +123,6 @@ export function useEditor(viewMode: "local" | "serial", mockMode = false) {
   const setActiveTab = useCallback((index: number) => {
     setState(prev => ({ ...prev, activeTabIndex: index }));
   }, []);
-
-  // ---- Content editing ----
-
-  const updateContent = useCallback((index: number, content: string) => {
-    setState(prev => {
-      const tabs = prev.tabs.map((t, i) =>
-        i === index ? { ...t, content, dirty: content !== t.original } : t
-      );
-      return { ...prev, tabs };
-    });
-
-    // Auto-save
-    if (state.autoSave) {
-      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-      autoSaveTimer.current = setTimeout(() => {
-        saveFile(index);
-      }, 2000);
-    }
-  }, [state.autoSave]);
 
   // ---- Save ----
 
@@ -176,6 +159,25 @@ export function useEditor(viewMode: "local" | "serial", mockMode = false) {
       });
     }
   }, [state.tabs]);
+
+  // ---- Content editing ----
+
+  const updateContent = useCallback((index: number, content: string) => {
+    setState(prev => {
+      const tabs = prev.tabs.map((t, i) =>
+        i === index ? { ...t, content, dirty: content !== t.original } : t
+      );
+      return { ...prev, tabs };
+    });
+
+    // Auto-save
+    if (state.autoSave) {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = setTimeout(() => {
+        saveFile(index);
+      }, 2000);
+    }
+  }, [state.autoSave, saveFile]);
 
   const saveAll = useCallback(async () => {
     for (let i = 0; i < state.tabs.length; i++) {

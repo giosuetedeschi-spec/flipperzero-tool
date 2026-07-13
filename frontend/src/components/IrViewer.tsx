@@ -1,19 +1,19 @@
 import { useState, useEffect } from "react";
-import { parserParseIrStruct } from "../services/tauri";
+import { parserParseIrStruct, type IrFile } from "../services/tauri";
 
 interface Props {
   content: string;
   fileName: string;
 }
 
-export default function IrViewer({ content, fileName }: Props) {
-  const [data, setData] = useState<any>(null);
+export default function IrViewer({ content }: Props) {
+  const [data, setData] = useState<IrFile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     parserParseIrStruct(content)
-      .then((result: any) => setData(result.fields?.[0] || result))
-      .catch((e: any) => setError(String(e)));
+      .then((result) => setData(result))
+      .catch((e) => setError(String(e)));
   }, [content]);
 
   if (error) return <div className="text-red-400 text-xs p-2">Parse error: {error}</div>;
@@ -42,7 +42,7 @@ export default function IrViewer({ content, fileName }: Props) {
         <div className="space-y-1">
           <span className="text-gray-400 text-xs">Buttons ({data.buttons.length})</span>
           <div className="max-h-32 overflow-y-auto space-y-1">
-            {data.buttons.map((btn: any, i: number) => (
+            {data.buttons.map((btn, i) => (
               <div key={i} className="bg-gray-700/50 rounded p-2 text-xs flex justify-between">
                 <span className="text-gray-300">{btn.name}</span>
                 <span className="text-gray-500 font-mono">

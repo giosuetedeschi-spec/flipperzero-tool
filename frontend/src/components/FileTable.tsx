@@ -36,7 +36,7 @@ export default function FileTable({ files, selectedPath, onSelect, onOpen, onDra
   };
 
   const sorted = [...files].sort((a, b) => {
-    let cmp = 0;
+    let cmp: number;
     if (sortKey === "name") cmp = a.name.localeCompare(b.name);
     else if (sortKey === "size") cmp = a.size - b.size;
     else cmp = (a.modified || "").localeCompare(b.modified || "");
