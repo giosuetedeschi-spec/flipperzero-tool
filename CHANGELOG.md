@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `docs/MOBILE-PORT-PLAN.md`: architecture and 8-phase delivery plan for the iOS/Android port and the
+  new Signal Radar view, plus `docs/AGENT-PROMPT-MOBILE-PORT.md` with the implementation prompt
+
+### Security
+- Frontend: resolved 4 high-severity advisories in transitive dependencies via `npm audit fix`
+  (`nanoid` 3.3.12 → 3.3.18, `postcss` 8.5.15 → 8.5.26, `undici` 7.28.0 → 7.29.0,
+  `brace-expansion` 5.0.6 → 5.0.9). Lockfile only — `package.json` unchanged, all bumps
+  semver-compatible. Unblocks the `security-scan` CI job, which was failing on every branch
+
 ### Fixed
 - parsers.rs: changed return type from `Result<ParsedFile, String>` to `Result<ParsedFile, AppError>` for consistency
 - App.tsx: removed hardcoded Windows path `MOCK_ROOT`, now uses localStorage for root directory
