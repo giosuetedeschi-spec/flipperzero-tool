@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod errors;
+pub mod mock_device;
 pub mod parsers;
 pub mod proto_bus;
 pub mod reverse_engineer;

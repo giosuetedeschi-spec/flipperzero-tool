@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod ble;
 pub mod loopback;
+pub mod tcp;
 #[cfg(desktop)]
 pub mod usb_cdc;
 

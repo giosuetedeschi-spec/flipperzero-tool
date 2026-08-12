@@ -325,7 +325,7 @@ mod tests {
         // A stack that reports 0 before negotiation would otherwise produce an
         // empty chunk forever.
         let (link, state) = FakeBleLink::new(0);
-        let mut transport = BleTransport::new(Box::new(link));
+        let transport = BleTransport::new(Box::new(link));
         state.lock().unwrap().mtu_payload = 0;
 
         assert!(transport.max_write_chunk() >= 1);
