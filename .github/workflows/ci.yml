@@ -158,11 +158,12 @@ jobs:
         working-directory: frontend
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
+      # cargo-ndk locates the toolchain from ANDROID_NDK_ROOT, which the runner
+      # image already exports. Setting ANDROID_NDK_HOME here would override it
+      # with an empty string, since that variable is not in the `env` context.
       - name: Check Android build (arm64)
         run: cargo ndk -t arm64-v8a check
         working-directory: src-tauri
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
       - name: Assert serialport is excluded from the Android dependency tree
         run: |
           if cargo tree --target aarch64-linux-android -i serialport 2>/dev/null | grep -q '^serialport'; then
