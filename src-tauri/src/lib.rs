@@ -5,6 +5,7 @@ pub mod proto_bus;
 pub mod reverse_engineer;
 pub mod rpc;
 pub mod serial;
+pub mod signals;
 pub mod transport;
 pub mod ufbt;
 pub mod vfs;
