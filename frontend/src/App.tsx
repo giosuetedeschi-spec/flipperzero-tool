@@ -3,35 +3,44 @@ import { serialDisconnect, createFileFromTemplate, moveFile, type FileInfo } fro
 import { useDirectory } from "./hooks/useDirectory";
 import { useEditor } from "./hooks/useEditor";
 import { useDragDrop } from "./hooks/useDragDrop";
-import FileTable from "./components/FileTable";
-import EditorPanel from "./components/EditorPanel";
 import NewFileModal from "./components/NewFileModal";
 import DevicePanel from "./components/DevicePanel";
 import { ToastContainer } from "./components/ui/Toast";
 import { showToast } from "./lib/toastStore";
+import AppShell from "./shell/AppShell";
+import type { Section } from "./shell/sections";
+import { useIsMobileLayout } from "./shell/useBreakpoint";
+import RadarView from "./views/RadarView";
+import FilesView from "./views/FilesView";
+import ToolsView from "./views/ToolsView";
+import DeviceView from "./views/DeviceView";
+import SettingsView from "./views/SettingsView";
+import { useT } from "./i18n/useT";
 
 type ViewMode = "local" | "serial";
 
 export default function App() {
-  // --- View mode ---
-  const [viewMode, setViewMode] = useState<ViewMode>("local");
+  const { t } = useT();
+  const isMobile = useIsMobileLayout();
 
-  // --- Serial state ---
+  // A phone opens on the Radar -- it is what the mobile app is for. Desktop
+  // opens on the file browser, which is what it has always done.
+  const [section, setSection] = useState<Section>(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "radar" : "files",
+  );
+
+  const [viewMode, setViewMode] = useState<ViewMode>("local");
   const [serialConnected, setSerialConnected] = useState(false);
   const [mockMode, setMockMode] = useState(false);
+  const [showNewFile, setShowNewFile] = useState(false);
+
   const effectiveSerialConnected = serialConnected || mockMode;
 
-  // --- New file modal ---
-  const [showNewFile, setShowNewFile] = useState(false);
-  const [showReverseEngineer, setShowReverseEngineer] = useState(false);
-
-  // --- Custom hooks ---
   const dir = useDirectory(viewMode, effectiveSerialConnected, mockMode);
   const editor = useEditor(viewMode, mockMode);
   const dnd = useDragDrop(async (file: FileInfo, targetPath: string) => {
     try {
-      const dest = targetPath + "/" + file.name;
-      await moveFile(file.path, dest);
+      await moveFile(file.path, targetPath + "/" + file.name);
       dir.refresh();
       showToast(`Moved ${file.name} → ${targetPath}`, "success");
     } catch (err) {
@@ -39,42 +48,36 @@ export default function App() {
     }
   });
 
-  // --- Serial connect/disconnect ---
   const handleDisconnect = async () => {
-    try { await serialDisconnect(); } catch { /* ignore */ }
+    try {
+      await serialDisconnect();
+    } catch {
+      /* already gone; nothing to report */
+    }
     setSerialConnected(false);
-    dir.setCurrentPath("");
-    const saved = localStorage.getItem("flipper_root_path");
-    if (saved) dir.setCurrentPath(saved);
+    dir.setCurrentPath(localStorage.getItem("flipper_root_path") ?? "");
     editor.closeAll();
-    showToast("Disconnected", "info");
+    showToast(t("device.disconnected"), "info");
   };
 
   const handleSwitchMode = (mode: ViewMode) => {
-    if (mode !== viewMode && serialConnected) handleDisconnect();
+    if (mode !== viewMode && serialConnected) void handleDisconnect();
     setViewMode(mode);
     if (mode !== "serial") setMockMode(false);
     editor.closeAll();
     dir.setError(null);
   };
 
-  // --- File operations ---
   const handleNavigate = (info: FileInfo) => {
-    if (info.is_dir) {
-      dir.setCurrentPath(info.path);
-      dir.setSearchQuery("");
-      editor.closeAll();
-    }
-  };
-
-  const handleSelectFile = async (file: FileInfo) => {
-    editor.openFile(file);
+    if (!info.is_dir) return;
+    dir.setCurrentPath(info.path);
+    dir.setSearchQuery("");
+    editor.closeAll();
   };
 
   const handleCreateFile = async (name: string, ext: string) => {
     try {
-      const basePath = dir.currentPath + "/" + name;
-      await createFileFromTemplate(basePath, ext);
+      await createFileFromTemplate(dir.currentPath + "/" + name, ext);
       setShowNewFile(false);
       dir.refresh();
       showToast(`Created ${name}.${ext}`, "success");
@@ -83,102 +86,71 @@ export default function App() {
     }
   };
 
-  // --- Render ---
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center gap-4">
-        <h1 className="text-lg font-bold text-emerald-400">Flipper Tool</h1>
-
-        {/* Mode toggle */}
-        <div className="flex items-center rounded-2xl bg-gray-700 p-1 gap-1">
-          <button
-            onClick={() => handleSwitchMode("local")}
-            className={`rounded-2xl px-4 py-2 text-sm font-semibold transition border ${viewMode === "local" ? "bg-emerald-600 text-white border-emerald-500" : "border-gray-600 text-gray-200 bg-gray-800 hover:border-gray-500 hover:text-white"}`}
-          >
-            Local
-          </button>
-          <button
-            onClick={() => handleSwitchMode("serial")}
-            className={`rounded-2xl px-4 py-2 text-sm font-semibold transition border ${viewMode === "serial" ? "bg-emerald-600 text-white border-emerald-500" : "border-gray-600 text-gray-200 bg-gray-800 hover:border-gray-500 hover:text-white"}`}
-          >
-            Serial
-          </button>
-          {viewMode === "serial" && (
-            <button
-              onClick={() => setMockMode(!mockMode)}
-              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition border ${mockMode ? "bg-purple-600 text-white border-purple-500" : "border-gray-600 text-gray-200 bg-gray-800 hover:border-gray-500 hover:text-white"}`}
-            >
-              {mockMode ? "Mock On" : "Mock Off"}
-            </button>
-          )}
-        </div>
-
-        {/* Serial controls */}
-        {viewMode === "serial" && (
-          <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col p-3 gap-3">
-            <DevicePanel onConnectionChange={setSerialConnected} mockMode={mockMode} />
+    <AppShell section={section} onNavigate={setSection}>
+      {/* The file toolbar belongs to the Files section only; showing it above the
+          Radar would imply the two are related. */}
+      {section === "files" && (
+        <header className="flex flex-wrap items-center gap-2 border-b border-gray-700 bg-gray-800 px-4 py-2">
+          <div className="flex items-center gap-1 rounded-2xl bg-gray-700 p-1">
+            {(["local", "serial"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => handleSwitchMode(mode)}
+                className={`rounded-2xl px-3 py-1.5 text-sm font-semibold transition ${
+                  viewMode === mode
+                    ? "bg-emerald-600 text-white"
+                    : "text-gray-200 hover:text-white"
+                }`}
+              >
+                {mode === "local" ? t("files.mode.local") : t("files.mode.serial")}
+              </button>
+            ))}
           </div>
-        )}
 
-        {/* Breadcrumb / Path bar */}
-        <div className="flex-1 flex items-center gap-2">
+          {viewMode === "serial" && !isMobile && (
+            <DevicePanel onConnectionChange={setSerialConnected} mockMode={mockMode} />
+          )}
+
           <button
             onClick={dir.goUp}
-            className="rounded-2xl border border-gray-600 bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
-            title="Go to parent directory"
+            className="rounded-2xl border border-gray-600 bg-gray-700 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-600"
           >
-            Up
+            {t("files.up")}
           </button>
-          <span className="flex-1 rounded-2xl bg-gray-700 px-4 py-2 text-sm font-mono text-gray-300 truncate">
-            {viewMode === "serial" && mockMode ? "/mock" : dir.currentPath || "(no folder selected)"}
+          <span className="flex-1 truncate rounded-2xl bg-gray-700 px-3 py-1.5 font-mono text-sm text-gray-300">
+            {viewMode === "serial" && mockMode ? "/mock" : dir.currentPath || t("files.no_folder")}
           </span>
-        </div>
 
-        {/* Search + New */}
-        <input
-          type="text"
-          placeholder="Search..."
-          value={dir.searchQuery}
-          onChange={(e) => dir.setSearchQuery(e.target.value)}
-          className="rounded-2xl border border-gray-600 bg-gray-700 px-4 py-2 text-sm text-gray-100 w-52 placeholder-gray-500 focus:border-emerald-500 focus:outline-none"
-        />
-        <button
-          onClick={() => setShowNewFile(!showNewFile)}
-          className="rounded-2xl border border-emerald-500 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500"
-        >
-          + New
-        </button>
-        <button
-          onClick={() => setShowReverseEngineer(!showReverseEngineer)}
-          className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${showReverseEngineer ? "bg-purple-600 text-white border-purple-500" : "border-gray-600 bg-gray-700 text-gray-200 hover:border-gray-500 hover:text-white"}`}
-        >
-          Reverse Engineer
-        </button>
-      </header>
+          <input
+            type="text"
+            placeholder={t("files.search")}
+            value={dir.searchQuery}
+            onChange={(e) => dir.setSearchQuery(e.target.value)}
+            className="w-40 rounded-2xl border border-gray-600 bg-gray-700 px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:border-emerald-500 focus:outline-none"
+          />
+          <button
+            onClick={() => setShowNewFile(!showNewFile)}
+            className="rounded-2xl border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-500"
+          >
+            {t("files.new")}
+          </button>
+        </header>
+      )}
 
-      {/* Error bar */}
-      {dir.error && (
-        <div className="bg-red-950/95 border-b border-red-700 px-4 py-3 flex flex-col gap-2 text-left">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-red-100">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-700 text-xs">!</span>
-              <span>Error loading files</span>
-            </div>
-            <button onClick={() => dir.setError(null)} className="text-red-300 hover:text-red-100 text-sm">Dismiss</button>
-          </div>
-          <div className="rounded-lg bg-red-900/80 border border-red-700 p-3 text-xs leading-5 text-red-100 whitespace-pre-wrap">
-            {dir.error}
-          </div>
-          <div className="flex flex-wrap gap-2 text-[11px] text-slate-300">
-            <span>Try refreshing or selecting a different folder.</span>
-            <button onClick={dir.refresh} className="rounded bg-slate-800 px-2 py-1 text-slate-100 hover:bg-slate-700">Refresh</button>
-          </div>
+      {section === "files" && dir.error && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-4 border-b border-red-700 bg-red-950 px-4 py-2 text-sm text-red-100"
+        >
+          <span className="truncate">{dir.error}</span>
+          <button onClick={() => dir.setError(null)} className="text-red-300 hover:text-red-100">
+            {t("common.close")}
+          </button>
         </div>
       )}
 
-      {/* New file bar */}
-      {showNewFile && (
+      {showNewFile && section === "files" && (
         <NewFileModal
           currentPath={dir.currentPath}
           onClose={() => setShowNewFile(false)}
@@ -186,76 +158,38 @@ export default function App() {
         />
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* File browser */}
-        <div className="flex-1 overflow-auto">
-          {viewMode === "serial" && !serialConnected ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
-              <span className="text-4xl">🔌</span>
-              <span>Select a port and connect to browse Flipper files</span>
-              <span className="text-xs text-gray-600">Make sure your Flipper Zero is connected via USB</span>
-            </div>
-          ) : dir.loading ? (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              <span className="animate-spin mr-2">⏳</span> Loading...
-            </div>
-          ) : dir.files.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              {dir.searchQuery ? "No files match your search" : "Empty directory"}
-            </div>
-          ) : (
-            <FileTable
-              files={dir.files}
-              selectedPath={editor.selectedFile?.path ?? null}
-              onSelect={handleSelectFile}
-              onOpen={handleNavigate}
-              onDragStart={dnd.handleDragStart}
-              onDropOnDir={dnd.handleDropOnDir}
-            />
-          )}
-        </div>
+      {section === "radar" && (
+        <RadarView connected={effectiveSerialConnected} mockMode={mockMode} />
+      )}
 
-        {/* Editor panel with tabs */}
-        <EditorPanel
-          tabs={editor.tabs}
-          activeTabIndex={editor.activeTabIndex}
-          showSearch={editor.showSearch}
-          search={editor.search}
-          autoSave={editor.autoSave}
-          wordWrap={editor.wordWrap}
-          lineNumbers={editor.lineNumbers}
-          hasDirtyTabs={editor.hasDirtyTabs}
-          dirtyCount={editor.dirtyCount}
-          onContentChange={editor.updateContent}
-          onSave={editor.saveFile}
-          onSaveAll={editor.saveAll}
-          onClose={editor.closeTab}
-          onCloseAll={editor.closeAll}
-          onSetActive={editor.setActiveTab}
-          onToggleSearch={editor.toggleSearch}
-          onSetSearchQuery={editor.setSearchQuery}
-          onSetReplace={editor.setReplace}
-          onToggleCaseSensitive={editor.toggleCaseSensitive}
-          onFindNext={editor.findNext}
-          onFindPrev={editor.findPrev}
-          onReplaceOne={editor.replaceOne}
-          onReplaceAll={editor.replaceAll}
-          onToggleAutoSave={editor.toggleAutoSave}
-          onToggleWordWrap={editor.toggleWordWrap}
-          onToggleLineNumbers={editor.toggleLineNumbers}
+      {section === "files" && (
+        <FilesView
+          dir={dir}
+          editor={editor}
+          dnd={dnd}
           viewMode={viewMode}
+          serialConnected={effectiveSerialConnected}
+          onSelectFile={editor.openFile}
+          onOpenDir={handleNavigate}
         />
-      </div>
+      )}
 
-      {/* Footer */}
-      <footer className="bg-gray-800 border-t border-gray-700 px-4 py-2 text-xs text-gray-500 flex justify-between">
-        <span>{dir.files.length} items</span>
-        <span>{viewMode === "serial" ? (mockMode ? "Mock Flipper Active" : serialConnected ? "Flipper Connected" : "Serial Mode") : "Local Mode"}</span>
-        {editor.dirty && <span className="text-amber-400">Unsaved changes</span>}
-      </footer>
+      {section === "tools" && (
+        <ToolsView
+          currentPath={dir.currentPath}
+          openFiles={editor.tabs.map((tab) => ({ name: tab.file.name, content: tab.content }))}
+        />
+      )}
+
+      {section === "device" && (
+        <DeviceView connected={serialConnected} onConnectionChange={setSerialConnected} />
+      )}
+
+      {section === "settings" && (
+        <SettingsView mockMode={mockMode} onMockModeChange={setMockMode} />
+      )}
 
       <ToastContainer />
-    </div>
+    </AppShell>
   );
 }
