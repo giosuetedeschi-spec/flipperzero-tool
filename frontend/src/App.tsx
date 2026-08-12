@@ -7,6 +7,8 @@ import NewFileModal from "./components/NewFileModal";
 import DevicePanel from "./components/DevicePanel";
 import { ToastContainer } from "./components/ui/Toast";
 import { showToast } from "./lib/toastStore";
+import { getErrorMessage, signalsPerformAction } from "./services/tauri";
+import type { ActionId, Signal } from "./types/signals";
 import AppShell from "./shell/AppShell";
 import type { Section } from "./shell/sections";
 import { useIsMobileLayout } from "./shell/useBreakpoint";
@@ -73,6 +75,32 @@ export default function App() {
     dir.setCurrentPath(info.path);
     dir.setSearchQuery("");
     editor.closeAll();
+  };
+
+  // Actions on a detected signal. Every outcome is reported: an action that
+  // cannot run yet says why, rather than looking like a button that does
+  // nothing.
+  const handleSignalAction = async (signal: Signal, action: ActionId) => {
+    try {
+      const outcome = await signalsPerformAction(signal.id, action);
+      switch (outcome.kind) {
+        case "saved":
+          showToast(`${t("action.save")}: ${outcome.path}`, "success");
+          break;
+        case "exported":
+          await navigator.clipboard?.writeText(outcome.contents).catch(() => {});
+          showToast(`${t("action.export")}: ${outcome.filename}`, "success");
+          break;
+        case "analysis":
+          showToast(`${t("action.analyze")}: entropy ${outcome.entropy.toFixed(2)}`, "info");
+          break;
+        case "unavailable":
+          showToast(outcome.detail, "info");
+          break;
+      }
+    } catch (err) {
+      showToast(getErrorMessage(err), "error");
+    }
   };
 
   const handleCreateFile = async (name: string, ext: string) => {
@@ -159,7 +187,11 @@ export default function App() {
       )}
 
       {section === "radar" && (
-        <RadarView connected={effectiveSerialConnected} mockMode={mockMode} />
+        <RadarView
+          connected={effectiveSerialConnected}
+          mockMode={mockMode}
+          onPerform={(signal, action) => void handleSignalAction(signal, action)}
+        />
       )}
 
       {section === "files" && (

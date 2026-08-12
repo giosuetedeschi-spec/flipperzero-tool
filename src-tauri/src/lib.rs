@@ -101,6 +101,7 @@ pub fn run() {
             commands::signals_record,
             commands::signals_delete,
             commands::signals_clear,
+            commands::signals_perform_action,
             // Templates
             commands::template_get,
             commands::template_list,

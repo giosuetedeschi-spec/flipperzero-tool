@@ -284,7 +284,7 @@ pub fn parse_nfc(raw: &str) -> Result<ParsedFile, AppError> {
             "Version" => {
                 version = v.parse().unwrap_or(0);
             }
-            "Device Type" | "DeviceType" => {
+            "Device type" | "Device Type" | "DeviceType" => {
                 device_type = v.clone();
             }
             "UID" => {
@@ -648,7 +648,7 @@ impl ParsedFile {
             match k.as_str() {
                 "Filetype" => filetype = v.clone(),
                 "Version" => version = v.parse().unwrap_or(0),
-                "Device Type" | "DeviceType" => device_type = v.clone(),
+                "Device type" | "Device Type" | "DeviceType" => device_type = v.clone(),
                 "UID" => uid = v.clone(),
                 "ATQA" => atqa = v.clone(),
                 "SAK" => {
@@ -819,6 +819,31 @@ pub fn parse_ibtn_struct(raw: &str) -> Result<IButtonFile, AppError> {
         data,
         extra,
     })
+}
+
+#[cfg(test)]
+mod nfc_spelling_tests {
+    use super::*;
+
+    /// Real Flipper `.nfc` files write "Device type" with a lowercase t. The
+    /// parser once accepted only the capitalised spellings and dropped the
+    /// field silently, so every genuine file parsed with an empty device type.
+    #[test]
+    fn accepts_the_spelling_the_firmware_actually_writes() {
+        let raw = "Filetype: Flipper NFC device\nVersion: 4\nDevice type: UID\nUID: 04 1E 23\n";
+        let parsed = ParsedFile::parse_nfc_struct(raw).unwrap();
+        assert_eq!(parsed.device_type, "UID");
+        assert_eq!(parsed.uid, "04 1E 23");
+    }
+
+    #[test]
+    fn still_accepts_the_capitalised_variants() {
+        for spelling in ["Device Type", "DeviceType"] {
+            let raw = format!("{}: Mifare Classic\nUID: AA BB\n", spelling);
+            let parsed = ParsedFile::parse_nfc_struct(&raw).unwrap();
+            assert_eq!(parsed.device_type, "Mifare Classic", "{}", spelling);
+        }
+    }
 }
 
 #[cfg(test)]

@@ -71,8 +71,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
-      - name: TypeScript check
-        run: npx tsc --noEmit
+      # `tsc --noEmit` checks nothing here: the root tsconfig.json has
+      # "files": [] and only project references, so it silently passed while
+      # real type errors sat in the app sources. `tsc -b` builds the referenced
+      # projects and actually checks them.
+      - name: Type check
+        run: npx tsc -b --force
         working-directory: frontend
 
   frontend-lint:

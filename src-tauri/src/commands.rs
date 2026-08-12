@@ -802,3 +802,25 @@ pub fn signals_delete(app: tauri::AppHandle, signal_id: String) -> Result<bool, 
 pub fn signals_clear(app: tauri::AppHandle) -> Result<(), AppError> {
     with_signal_db(&app, super::signals::store::clear_conn)
 }
+
+/// Perform an action on a detected signal.
+///
+/// `Save` writes the capture to the SD card through the connected device; every
+/// other outcome is computed here and handed back for the UI to present.
+#[tauri::command]
+pub fn signals_perform_action(
+    app: tauri::AppHandle,
+    signal_id: String,
+    action: super::signals::ActionId,
+) -> Result<super::signals::actions::ActionOutcome, AppError> {
+    let signal = with_signal_db(&app, |conn| {
+        super::signals::store::get_conn(conn, &signal_id)
+    })?
+    .ok_or_else(|| AppError::NotFound(format!("Unknown signal: {}", signal_id)))?;
+
+    // No FAP deployment path exists yet, so nothing can transmit. Saying so
+    // through the outcome keeps the claim in one place rather than scattering
+    // optimistic assumptions through the UI.
+    let capabilities = super::signals::actions::DeviceCapabilities::NONE;
+    super::signals::actions::perform(&signal, action, capabilities)
+}

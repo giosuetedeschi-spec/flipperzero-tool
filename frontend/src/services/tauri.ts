@@ -388,7 +388,7 @@ export async function reverseEngineerAnalyzeFile(path: string): Promise<Analysis
 // Signal Radar
 // ---------------------------------------------------------------------------
 
-import type { ChipSlug, Signal } from "../types/signals";
+import type { ActionId, ChipSlug, Signal } from "../types/signals";
 
 export interface Sighting {
   seen_at: number;
@@ -423,4 +423,18 @@ export function signalsDelete(signalId: string): Promise<boolean> {
 
 export function signalsClear(): Promise<void> {
   return invoke("signals_clear");
+}
+
+/** What performing an action produced. Mirrors `signals::actions::ActionOutcome`. */
+export type ActionOutcome =
+  | { kind: "analysis"; entropy: number; [key: string]: unknown }
+  | { kind: "saved"; path: string }
+  | { kind: "exported"; filename: string; contents: string }
+  | { kind: "unavailable"; reason_key: string; detail: string };
+
+export function signalsPerformAction(
+  signalId: string,
+  action: ActionId,
+): Promise<ActionOutcome> {
+  return invoke("signals_perform_action", { signalId, action });
 }
