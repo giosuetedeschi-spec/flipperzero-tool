@@ -66,6 +66,10 @@ fn init_schema(conn: &Connection) -> Result<(), AppError> {
     )
     .map_err(AppError::from)?;
 
+    // The Signal Radar tables live in the same database file rather than a
+    // second one, so a single connection serves both the file cache and the
+    // signal history.
+    crate::signals::store::init_schema(conn)?;
     Ok(())
 }
 
@@ -73,10 +77,10 @@ fn init_schema(conn: &Connection) -> Result<(), AppError> {
 // Connection helper (thread-safe via Arc<Mutex<>>)
 // ---------------------------------------------------------------------------
 
-type DbState = Arc<StdMutex<Connection>>;
+pub(crate) type DbState = Arc<StdMutex<Connection>>;
 
 /// Get or create the database connection.
-fn get_conn(app: &AppHandle) -> Result<DbState, AppError> {
+pub(crate) fn get_conn(app: &AppHandle) -> Result<DbState, AppError> {
     // Try to get existing state
     if let Some(state) = app.try_state::<DbState>() {
         return Ok(state.inner().clone());
@@ -317,6 +321,46 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         init_schema(&conn).unwrap();
         conn
+    }
+
+    /// The Radar's tables are created alongside the file cache rather than in a
+    /// second database, so one connection serves both. Nothing else asserts
+    /// that the two schemas actually meet.
+    #[test]
+    fn init_schema_also_creates_the_signal_tables() {
+        let conn = test_conn();
+        for table in ["files", "file_cache", "signals", "signal_sightings"] {
+            let found: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(found, 1, "{} is missing from the schema", table);
+        }
+    }
+
+    /// A signal recorded through the shared connection must be readable back
+    /// through it, which is the point of not opening a second database.
+    #[test]
+    fn signals_round_trip_through_the_shared_connection() {
+        use crate::signals::model::{Signal, SignalKind};
+
+        let conn = test_conn();
+        let signal = Signal::new(
+            SignalKind::LfRfid {
+                protocol: "EM4100".to_string(),
+                data: "12 34".to_string(),
+            },
+            1_000,
+        );
+
+        assert!(crate::signals::store::record_conn(&conn, &signal).unwrap());
+        let stored = crate::signals::store::get_conn(&conn, &signal.id)
+            .unwrap()
+            .expect("the signal should be readable back");
+        assert_eq!(stored.id, signal.id);
     }
 
     #[test]

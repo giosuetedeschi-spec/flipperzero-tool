@@ -1,0 +1,32 @@
+# Build with uFBT from this directory:
+#
+#   ufbt              # build
+#   ufbt launch       # build, upload and start on a connected Flipper
+#
+# uFBT downloads the Flipper SDK on first run, so a machine without access to
+# update.flipperzero.one cannot build this. That is why the FAP is absent from
+# CI and why the wire protocol is verified from the Rust side instead, against
+# flipper-fap/signal_radar/protocol.h.
+
+App(
+    appid="signal_radar",
+    name="Signal Radar",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="signal_radar_app",
+    stack_size=4 * 1024,
+    fap_category="Tools",
+    fap_description=(
+        "Scans the Flipper's radios and streams what it finds to the "
+        "FlipperZero Tool mobile app."
+    ),
+    fap_author="giosue",
+    fap_version="1.0",
+    fap_icon_assets="images",
+    requires=[
+        "gui",
+        "subghz",
+        "nfc",
+        "lfrfid",
+        "infrared",
+    ],
+)

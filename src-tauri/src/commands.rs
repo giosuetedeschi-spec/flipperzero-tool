@@ -265,11 +265,11 @@ pub async fn serial_upload(
     local_path: String,
     remote_path: String,
 ) -> Result<bool, AppError> {
-    // Read local file and write to Flipper
+    // Upload the bytes as they are. Rejecting non-UTF-8 here made it impossible
+    // to push any binary payload (`.fap`, `.nfc` dumps, firmware) to the device,
+    // and `write_file` already base64-encodes whatever it is given.
     let data = std::fs::read(&local_path).map_err(AppError::from)?;
-    let text = String::from_utf8(data)
-        .map_err(|e| AppError::ParseError(format!("Not valid UTF-8: {}", e)))?;
-    super::serial::write_file_text(&state, &remote_path, &text)
+    super::serial::write_file(&state, &remote_path, &data)
 }
 
 #[tauri::command]
@@ -278,10 +278,12 @@ pub async fn serial_download(
     remote_path: String,
     local_path: String,
 ) -> Result<bool, AppError> {
-    let text = super::serial::read_file_text(&state, &remote_path)?;
+    // Download as bytes, not text, for the same reason `serial_upload` does:
+    // forcing UTF-8 corrupts or rejects every binary file on the SD card.
+    let data = super::serial::read_file(&state, &remote_path)?;
     // Safe save: write to temp then rename
     let temp = std::path::Path::new(&local_path).with_extension("tmp");
-    std::fs::write(&temp, text.as_bytes()).map_err(AppError::from)?;
+    std::fs::write(&temp, &data).map_err(AppError::from)?;
     std::fs::rename(&temp, &local_path).map_err(AppError::from)?;
     Ok(true)
 }
@@ -600,6 +602,29 @@ pub fn parser_parse_nfc_struct(data: String) -> Result<super::parsers::NfcFile, 
     super::parsers::ParsedFile::parse_nfc_struct(&data)
 }
 
+// LF RFID and iButton: the two Flipper key formats the app previously could not
+// read at all.
+
+#[tauri::command]
+pub fn parser_parse_rfid(data: String) -> Result<ParsedFile, AppError> {
+    super::parsers::parse_rfid(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_ibtn(data: String) -> Result<ParsedFile, AppError> {
+    super::parsers::parse_ibtn(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_rfid_struct(data: String) -> Result<super::parsers::RfidFile, AppError> {
+    super::parsers::parse_rfid_struct(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_ibtn_struct(data: String) -> Result<super::parsers::IButtonFile, AppError> {
+    super::parsers::parse_ibtn_struct(&data)
+}
+
 // ---------------------------------------------------------------------------
 // Template file creation (P3)
 // ---------------------------------------------------------------------------
@@ -688,4 +713,114 @@ pub fn template_create(base_path: String, name: String, ext: String) -> Result<S
     })?;
 
     Ok(file_path.to_string_lossy().to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Signal Radar
+// ---------------------------------------------------------------------------
+//
+// The Radar reads through these rather than reaching into the store directly,
+// so the SQLite connection stays owned by `vfs` and there is one database file
+// for both the file cache and the signal history.
+
+use super::signals::store::Sighting;
+use super::signals::{Chip, Signal};
+
+/// Resolve a chip slug coming from the frontend.
+///
+/// An unknown slug means the caller is out of step with the model, so it is
+/// reported rather than quietly coerced to a default chip.
+fn parse_chip(slug: &str) -> Result<Chip, AppError> {
+    Chip::from_slug(slug).ok_or_else(|| AppError::General(format!("Unknown chip: {}", slug)))
+}
+
+/// Run `f` against the shared database connection.
+fn with_signal_db<T>(
+    app: &tauri::AppHandle,
+    f: impl FnOnce(&rusqlite::Connection) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let state = super::vfs::get_conn(app)?;
+    let conn = state
+        .lock()
+        .map_err(|_| AppError::DbError("Database mutex poisoned".to_string()))?;
+    f(&conn)
+}
+
+#[tauri::command]
+pub fn signals_list_by_chip(app: tauri::AppHandle, chip: String) -> Result<Vec<Signal>, AppError> {
+    let chip = parse_chip(&chip)?;
+    with_signal_db(&app, |conn| {
+        super::signals::store::list_by_chip_conn(conn, chip)
+    })
+}
+
+/// Distinct signals per chip, for the badges on the Radar diagram.
+#[tauri::command]
+pub fn signals_counts_by_chip(app: tauri::AppHandle) -> Result<Vec<(String, u32)>, AppError> {
+    with_signal_db(&app, |conn| {
+        Ok(super::signals::store::counts_by_chip_conn(conn)?
+            .into_iter()
+            .map(|(chip, count)| (chip.slug().to_string(), count))
+            .collect())
+    })
+}
+
+#[tauri::command]
+pub fn signals_get(app: tauri::AppHandle, signal_id: String) -> Result<Option<Signal>, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::get_conn(conn, &signal_id)
+    })
+}
+
+/// Every recorded encounter with one signal, for the timeline and RSSI history.
+#[tauri::command]
+pub fn signals_sightings(
+    app: tauri::AppHandle,
+    signal_id: String,
+) -> Result<Vec<Sighting>, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::sightings_conn(conn, &signal_id)
+    })
+}
+
+/// Record a detection. Returns true when this signal had never been seen before.
+#[tauri::command]
+pub fn signals_record(app: tauri::AppHandle, signal: Signal) -> Result<bool, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::record_conn(conn, &signal)
+    })
+}
+
+#[tauri::command]
+pub fn signals_delete(app: tauri::AppHandle, signal_id: String) -> Result<bool, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::delete_conn(conn, &signal_id)
+    })
+}
+
+#[tauri::command]
+pub fn signals_clear(app: tauri::AppHandle) -> Result<(), AppError> {
+    with_signal_db(&app, super::signals::store::clear_conn)
+}
+
+/// Perform an action on a detected signal.
+///
+/// `Save` writes the capture to the SD card through the connected device; every
+/// other outcome is computed here and handed back for the UI to present.
+#[tauri::command]
+pub fn signals_perform_action(
+    app: tauri::AppHandle,
+    signal_id: String,
+    action: super::signals::ActionId,
+) -> Result<super::signals::actions::ActionOutcome, AppError> {
+    let signal = with_signal_db(&app, |conn| {
+        super::signals::store::get_conn(conn, &signal_id)
+    })?
+    .ok_or_else(|| AppError::NotFound(format!("Unknown signal: {}", signal_id)))?;
+
+    // No FAP deployment path exists yet, so nothing can transmit. Saying so
+    // through the outcome keeps the claim in one place rather than scattering
+    // optimistic assumptions through the UI.
+    let capabilities = super::signals::actions::DeviceCapabilities::none();
+    super::signals::actions::perform(&signal, action, &capabilities)
 }

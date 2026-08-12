@@ -7,7 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — mobile port
+- Signal Radar: interactive Flipper diagram, per-chip drill-down, plain-language explanations for
+  every chip, signal and action, and a first-run explainer. Bilingual IT/EN throughout
+- `transport::Transport` with USB CDC, BLE and TCP implementations, plus `rpc::FlipperSession` and
+  length-delimited protobuf framing. `proto_bus::rpc_command` is implemented rather than stubbed
+- `signals`: unified `Signal` model, SQLite history with sightings and optional geotagging, action
+  execution, FAP telemetry protocol decoder, and firmware family detection
+- `.rfid` and `.ibtn` parsers, the last two Flipper formats the app could not read
+- A mock Flipper (`cargo run --bin flipper_mock`) speaking the real RPC protocol over TCP, with
+  end-to-end tests driving the whole stack against it
+- `flipper-fap/signal_radar`: the on-device scanning app, and the native BLE bridge for both platforms
+- CI cross-compiles for `aarch64-linux-android` and `aarch64-apple-ios`
+
+### Fixed — found while porting
+- The NFC parser rejected `Device type`, the spelling the firmware actually writes, so every genuine
+  `.nfc` file parsed with an empty device type
+- The `frontend-typecheck` CI job checked nothing: `npx tsc --noEmit` against a root tsconfig with
+  `"files": []` and only project references. It now runs `tsc -b --force`
+- Binary files could not round-trip: `base64_decode` did not exist, and `serial_upload` rejected any
+  non-UTF-8 input
+- Six commands the UI already called were never registered in the `invoke_handler` list
+- Polling continued while the app was off screen, draining both batteries
+
+### Known limitations
+- The native project shells are not generated; `tauri android init` needs an SDK and iOS needs macOS
+- The BLE bridge and the FAP are unverified until run on a device; see `docs/HARDWARE-CHECKLIST.md`
+- Transmitting is not implemented and says so rather than failing silently
+- The protobuf schema is still hand-written; replacing it needs the upstream repository
+
 ### Added
+- Mobile port, phase P0 (foundations). `serialport` is now a desktop-only dependency, declared under
+  a `cfg(not(android/ios))` target table, and every call site of it sits behind `#[cfg(desktop)]`
+  with a mobile counterpart that fails with a clear "use the BLE transport" message instead of
+  failing to compile. `run()` gained `#[cfg_attr(mobile, tauri::mobile_entry_point)]`
+- `serial::base64_decode`, the missing counterpart to `base64_encode`. Without it binary payloads
+  could be sent to the device but never read back, which blocks `.fap` deployment from a phone
+- New `android-check` CI job: type-checks the crate for `aarch64-linux-android` via `cargo-ndk` and
+  asserts `serialport` stays out of the Android dependency tree. The NDK is not available in every
+  development environment, so this guard lives in CI. It is green, which settles an open question
+  from the port plan: `rusqlite`'s bundled SQLite does cross-compile against the NDK
+- Mobile port, phase P1 (transport and RPC). `transport::Transport` is the seam every link shares:
+  USB CDC, BLE and Android USB-OTG move bytes differently but carry the same protobuf stream.
+  `transport::usb_cdc` implements it for desktop and holds the port open for the transport's whole
+  life, including the `start_rpc_session` handshake that switches the device out of CLI mode.
+  `transport::loopback` is an in-memory link that reproduces BLE's small MTU and partial reads
+- `rpc::framing` implements protobuf length-delimited framing, tolerating frames split across
+  arbitrary read boundaries -- including a varint length prefix straddling two BLE notifications
+- `rpc::FlipperSession` owns a connection for its lifetime and allocates RPC sequence ids
+- Mobile port, phase P5 (Signal Radar). `signals::model` normalises every radio into one `Signal`,
+  identified by a fingerprint over the fields that actually identify it -- excluding RSSI, time and
+  location, which describe a sighting rather than the signal, so repeat encounters increment a count
+  instead of piling up duplicates. `signals::store` keeps `signals` and `signal_sightings` as
+  separate tables so the timeline, RSSI history and geotagging survive
+- Signal Radar UI: `FlipperSchematic` (chip hotspots as real keyboard-reachable buttons, laid out
+  where the radios physically sit), `ChipSheet`, `SignalCard` and `TransmitGate`
+- Bilingual IT/EN interface via a flat key catalogue with interpolation and plural forms. The
+  English catalogue is typed against the Italian one, so a key added to one and missing from the
+  other fails the build rather than showing a raw key to a user
+- Mobile port, phase P7: `.rfid` (125 kHz badges) and `.ibtn` (iButton contact keys) parsers, both
+  loose and typed, with Tauri commands registered. These were the only two Flipper formats the app
+  could not read at all
+
+### Changed
+- `run()` no longer calls `std::process::exit` on a fatal error; it panics instead. Self-terminating
+  is not a legal way to leave a mobile app and iOS reports it as a crash
 - `docs/MOBILE-PORT-PLAN.md`: architecture and 8-phase delivery plan for the iOS/Android port and the
   new Signal Radar view, plus `docs/AGENT-PROMPT-MOBILE-PORT.md` with the implementation prompt
 
@@ -18,6 +82,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   semver-compatible. Unblocks the `security-scan` CI job, which was failing on every branch
 
 ### Fixed
+- `proto_bus::rpc_command` was a stub that always returned "ProtoBus serial integration pending",
+  leaving the tested protobuf codec with nothing underneath it and every `proto_*` helper dead. It
+  now runs over a `FlipperSession`, matching replies by `sequence_id` so unsolicited device messages
+  (and Signal Radar FAP telemetry) cannot be mistaken for a response and desynchronise the stream
+- `serial_upload` rejected any file that was not valid UTF-8, and `serial_download` forced downloads
+  through a UTF-8 round-trip. Both now move bytes, so binary files on the SD card survive the trip
+- Six commands defined in `commands.rs` were never registered in the `invoke_handler` list
+  (`parser_parse_{sub,ir,nfc}_struct`, `template_{get,list,create}`). The Sub-GHz/IR/NFC detail views
+  already invoked them, so those calls failed at runtime
 - parsers.rs: changed return type from `Result<ParsedFile, String>` to `Result<ParsedFile, AppError>` for consistency
 - App.tsx: removed hardcoded Windows path `MOCK_ROOT`, now uses localStorage for root directory
 - Backend no longer fails to compile: resolved the `serial.rs`/`serial/mod.rs` module conflict,

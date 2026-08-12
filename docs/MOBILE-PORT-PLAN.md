@@ -271,6 +271,44 @@ npx tauri ios build --debug               # build dev iOS
 
 ---
 
+---
+
+## Stato di avanzamento
+
+Aggiornato al termine del lavoro eseguibile senza SDK Android, macOS o un
+Flipper fisico. 276 test Rust e 96 frontend, tutti verdi; la CI compila anche
+per `aarch64-linux-android` e `aarch64-apple-ios`.
+
+| Fase | Stato | Cosa manca |
+|---|---|---|
+| **P0** Fondamenta | Parziale | Codice fatto (`serialport` isolato, `base64_decode`, comandi registrati, `mobile_entry_point`, config bundle mobile). **`tauri android/ios init` non eseguibile qui**: serve l'SDK |
+| **P1** RPC | Parziale | Trasporto, framing, sessione, `rpc_command` reale e mock TCP completi. **Manca `prost`**: servono i `.proto` upstream, irraggiungibili da qui |
+| **P2** Radio mobile | Parziale | Logica BLE testata (15 test) e ponti Kotlin/Swift scritti. **Mancano** plugin Tauri, USB-OTG, UX di pairing — tutti non verificabili senza dispositivo |
+| **P3** Guscio mobile | **Completa** | — |
+| **P4** FAP | Parziale | Protocollo verificato dal lato Rust (19 test), app C scritta con sweep Sub-GHz. **Mancano** deploy dall'app, altri chip, matrice firmware |
+| **P5** Radar | **Completa** | — |
+| **P6** Azioni | Parziale | Salva, Analizza, Esporta funzionano; il gate legale e quello di frequenza sono attivi. **La trasmissione vera dipende dal FAP** |
+| **P7** Copertura chip | Parziale | Parser `.rfid`/`.ibtn` e rilevamento firmware completi. **Il rilevamento moduli GPIO dipende dal FAP** |
+| **P8** Rifinitura | Parziale | i18n IT/EN, onboarding, job CI Android e iOS fatti. **Mancano** scan in background nativo e packaging sideload |
+
+Il dettaglio di ciò che richiede hardware, con i controlli da fare e il primo
+sospetto per ciascun possibile guasto, è in
+[`HARDWARE-CHECKLIST.md`](./HARDWARE-CHECKLIST.md).
+
+### Scoperte che hanno cambiato il piano
+
+- **`rusqlite` con SQLite bundled cross-compila per Android e iOS.** Era il
+  rischio #6 e non era scontato; ora è verificato in CI su entrambe le piattaforme.
+- **Il job `frontend-typecheck` non controllava nulla.** Eseguiva
+  `npx tsc --noEmit`, ma `tsconfig.json` ha `"files": []` e solo project
+  reference. Ora usa `tsc -b --force`.
+- **Il parser NFC rifiutava la grafia che il firmware scrive davvero**
+  (`Device type`, con la t minuscola), quindi ogni file `.nfc` autentico veniva
+  letto con il tipo dispositivo vuoto. Trovato facendo il round-trip di una
+  cattura esportata attraverso il parser stesso.
+
+---
+
 ## Esecuzione
 
 L'implementazione va affidata a un agente seguendo

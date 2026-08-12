@@ -8,7 +8,9 @@
 pub use super::commands::FileInfo;
 use super::errors::AppError;
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
+use std::io::Read;
+#[cfg(desktop)]
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -20,6 +22,13 @@ pub const FLIPPER_VID: u16 = 0x0483;
 pub const FLIPPER_PID: u16 = 0x5740;
 pub const FLIPPER_BAUD: u32 = 115200;
 pub const FLIPPER_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Returned by the USB entry points on iOS/Android, where `serialport` is not
+/// compiled in. Mobile reaches the Flipper over BLE (and Android USB-OTG); until
+/// those transports land, these calls fail loudly rather than pretending to work.
+#[cfg(not(desktop))]
+const NO_USB_ON_MOBILE: &str =
+    "USB serial is not available on this platform; use the BLE transport instead";
 
 // ---------------------------------------------------------------------------
 // Port discovery
@@ -35,6 +44,13 @@ pub struct PortInfo {
 }
 
 /// List all available serial ports.
+#[cfg(not(desktop))]
+pub fn list_ports() -> Result<Vec<PortInfo>, AppError> {
+    Err(AppError::SerialError(NO_USB_ON_MOBILE.to_string()))
+}
+
+/// List all available serial ports.
+#[cfg(desktop)]
 pub fn list_ports() -> Result<Vec<PortInfo>, AppError> {
     let ports = serialport::available_ports()
         .map_err(|e| AppError::SerialError(format!("Cannot list ports: {}", e)))?;
@@ -67,6 +83,13 @@ pub fn list_ports() -> Result<Vec<PortInfo>, AppError> {
 }
 
 /// Find a connected Flipper Zero by USB VID:PID.
+#[cfg(not(desktop))]
+pub fn find_flipper() -> Result<Option<PortInfo>, AppError> {
+    Err(AppError::SerialError(NO_USB_ON_MOBILE.to_string()))
+}
+
+/// Find a connected Flipper Zero by USB VID:PID.
+#[cfg(desktop)]
 pub fn find_flipper() -> Result<Option<PortInfo>, AppError> {
     let ports = serialport::available_ports()
         .map_err(|e| AppError::SerialError(format!("Cannot scan ports: {}", e)))?;
@@ -102,6 +125,17 @@ pub struct FlipperConnection {
     port_name: String,
 }
 
+#[cfg(not(desktop))]
+impl FlipperConnection {
+    /// Mobile has no `serialport`, so no CLI command can be issued over USB.
+    /// Every file operation funnels through here, which keeps the whole module
+    /// compiling on iOS/Android while failing honestly at runtime.
+    fn execute_command(&self, _cmd: &str) -> Result<String, AppError> {
+        Err(AppError::SerialError(NO_USB_ON_MOBILE.to_string()))
+    }
+}
+
+#[cfg(desktop)]
 impl FlipperConnection {
     fn open_port(&self) -> Result<Box<dyn serialport::SerialPort>, AppError> {
         serialport::new(&self.port_name, FLIPPER_BAUD)
@@ -157,6 +191,20 @@ impl FlipperConnection {
 // Connection management
 // ---------------------------------------------------------------------------
 
+#[cfg(not(desktop))]
+pub fn connect(state: &FlipperState, port: &str) -> Result<bool, AppError> {
+    // Keep the empty-port rejection ahead of the platform check so the error the
+    // caller sees for bad input is the same on every platform.
+    if port.is_empty() {
+        return Err(AppError::SerialError(
+            "Port name cannot be empty".to_string(),
+        ));
+    }
+    let _ = state;
+    Err(AppError::SerialError(NO_USB_ON_MOBILE.to_string()))
+}
+
+#[cfg(desktop)]
 pub fn connect(state: &FlipperState, port: &str) -> Result<bool, AppError> {
     if port.is_empty() {
         return Err(AppError::SerialError(
@@ -291,6 +339,56 @@ pub fn base64_encode(data: &[u8]) -> String {
     result
 }
 
+/// Decode standard base64 (with `=` padding, as produced by [`base64_encode`]).
+///
+/// The counterpart to `base64_encode`, whose absence meant binary payloads could
+/// be sent but never read back. Whitespace is skipped so the decoder tolerates
+/// output that arrived wrapped across lines.
+pub fn base64_decode(input: &str) -> Result<Vec<u8>, AppError> {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut acc: u32 = 0;
+    let mut bits: u32 = 0;
+    let mut padding = 0usize;
+    let mut out = Vec::with_capacity(input.len() / 4 * 3);
+
+    for ch in input.chars() {
+        if ch.is_whitespace() {
+            continue;
+        }
+        if ch == '=' {
+            padding += 1;
+            continue;
+        }
+        if padding > 0 {
+            return Err(AppError::ParseError(
+                "Invalid base64: data after padding".to_string(),
+            ));
+        }
+        let value = ALPHABET
+            .iter()
+            .position(|&c| c as char == ch)
+            .ok_or_else(|| AppError::ParseError(format!("Invalid base64 character: {:?}", ch)))?;
+        acc = (acc << 6) | value as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+
+    // A well-formed stream ends on a byte boundary; leftover set bits mean the
+    // input was truncated mid-group.
+    if acc != 0 {
+        return Err(AppError::ParseError(
+            "Invalid base64: truncated input".to_string(),
+        ));
+    }
+
+    Ok(out)
+}
+
 pub fn list_dir(state: &FlipperState, path: &str) -> Result<Vec<FileInfo>, AppError> {
     with_connection(state, |conn| {
         let output = conn.execute_command(&format!("storage list {}", path))?;
@@ -408,6 +506,40 @@ mod tests {
         let mut reader: &[u8] = &[];
         let result = read_varint(&mut reader, Duration::from_millis(1));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_base64_decode_matches_known_vectors() {
+        assert_eq!(base64_decode("aGVsbG8=").unwrap(), b"hello");
+        assert_eq!(base64_decode("").unwrap(), b"");
+        assert_eq!(base64_decode("YWI=").unwrap(), b"ab");
+    }
+
+    #[test]
+    fn test_base64_roundtrip_survives_arbitrary_binary() {
+        // The whole point of adding the decoder: bytes that are not valid UTF-8
+        // must come back byte-for-byte. This is what blocks `.fap` deployment.
+        let binary: Vec<u8> = (0u8..=255).collect();
+        let encoded = base64_encode(&binary);
+        assert_eq!(base64_decode(&encoded).unwrap(), binary);
+
+        for len in 0..16usize {
+            let data: Vec<u8> = (0..len).map(|i| (i * 37 + 11) as u8).collect();
+            assert_eq!(base64_decode(&base64_encode(&data)).unwrap(), data);
+        }
+    }
+
+    #[test]
+    fn test_base64_decode_skips_whitespace() {
+        assert_eq!(base64_decode("aGVs\nbG8=").unwrap(), b"hello");
+        assert_eq!(base64_decode("  aGVsbG8=  ").unwrap(), b"hello");
+    }
+
+    #[test]
+    fn test_base64_decode_rejects_malformed_input() {
+        assert!(base64_decode("aGVsbG8*").is_err(), "invalid character");
+        assert!(base64_decode("aGV=bG8=").is_err(), "data after padding");
+        assert!(base64_decode("aG9").is_err(), "truncated group");
     }
 
     #[test]

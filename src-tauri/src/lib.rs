@@ -1,9 +1,13 @@
 pub mod commands;
 pub mod errors;
+pub mod mock_device;
 pub mod parsers;
 pub mod proto_bus;
 pub mod reverse_engineer;
+pub mod rpc;
 pub mod serial;
+pub mod signals;
+pub mod transport;
 pub mod ufbt;
 pub mod vfs;
 
@@ -11,11 +15,11 @@ pub mod vfs;
 pub use commands::{copy_file, create_file_from_template, delete_file, find_files};
 pub use commands::{get_file_content, list_directory, move_file, rename_file, write_file_content};
 pub use errors::AppError;
-pub use parsers::{ParsedFile, parse_ir, parse_nfc, parse_sub};
+pub use parsers::{ParsedFile, parse_ibtn, parse_ir, parse_nfc, parse_rfid, parse_sub};
 pub use serial::new_state;
 pub use serial::{FlipperConnection, FlipperState, PortInfo};
 pub use serial::{autodetect_connect, delete_path, find_flipper, mkdir_path, stat_path};
-pub use serial::{base64_encode, encode_varint, parse_list_output, read_varint};
+pub use serial::{base64_decode, base64_encode, encode_varint, parse_list_output, read_varint};
 pub use serial::{connect, disconnect, is_connected, list_ports};
 pub use serial::{list_dir, read_file_text, write_file_text};
 
@@ -29,6 +33,11 @@ pub use proto_bus::{
 /// Builds and runs the Tauri application. The sole entry point used by
 /// `main.rs`, so the binary and the `flipperzero_tool_lib` crate never
 /// drift into two different module/handler trees again.
+///
+/// On iOS/Android there is no `main.rs` to call this: the platform launches the
+/// app through the generated native shell, which is what `mobile_entry_point`
+/// wires up.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
 
@@ -76,6 +85,27 @@ pub fn run() {
             commands::parser_parse_sub,
             commands::parser_parse_ir,
             commands::parser_parse_nfc,
+            // Typed parser variants, called by the Sub-GHz/IR/NFC detail views
+            commands::parser_parse_sub_struct,
+            commands::parser_parse_ir_struct,
+            commands::parser_parse_nfc_struct,
+            commands::parser_parse_rfid,
+            commands::parser_parse_ibtn,
+            commands::parser_parse_rfid_struct,
+            commands::parser_parse_ibtn_struct,
+            // Signal Radar
+            commands::signals_list_by_chip,
+            commands::signals_counts_by_chip,
+            commands::signals_get,
+            commands::signals_sightings,
+            commands::signals_record,
+            commands::signals_delete,
+            commands::signals_clear,
+            commands::signals_perform_action,
+            // Templates
+            commands::template_get,
+            commands::template_list,
+            commands::template_create,
             // uFBT
             commands::ufbt_new_project,
             commands::ufbt_compile,
@@ -98,8 +128,8 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .unwrap_or_else(|e| {
-            eprintln!("Fatal error: {}", e);
-            std::process::exit(1);
-        });
+        // `process::exit` skips destructors and is not a legal way to leave a
+        // mobile app: iOS treats a self-terminating process as a crash. Panic
+        // instead, which unwinds and surfaces the real cause on every platform.
+        .unwrap_or_else(|e| panic!("Fatal error while running the application: {}", e));
 }

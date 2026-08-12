@@ -8,10 +8,9 @@
 //!   - Session management (ping, stop, etc.)
 
 use super::errors::AppError;
-use super::serial::FlipperConnection;
+use super::rpc::FlipperSession;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 // ---------------------------------------------------------------------------
 // Message types (matching flipper.proto)
@@ -491,19 +490,40 @@ fn decode_file_list(data: &[u8]) -> Result<Vec<FileInfoProto>, AppError> {
 // High-level RPC API
 // ---------------------------------------------------------------------------
 
-/// Send an RPC command and wait for the response.
-/// NOTE: ProtoBus requires serial read/write which are on FlipperConnection.
-/// For now, protobuf encode/decode is available; serial integration requires
-/// extending FlipperConnection with port access.
+/// Send an RPC command over a live session and wait for its response.
+///
+/// Replies are matched by `sequence_id`. The device may interleave unsolicited
+/// messages -- broadcasts, and telemetry from the Signal Radar FAP -- with the
+/// answer to a request, so anything carrying a different id is skipped rather
+/// than mistaken for the reply. Without that check the first stray message
+/// would desynchronise every subsequent command by one.
 pub fn rpc_command(
-    _state: &Arc<std::sync::Mutex<super::serial::FlipperConnection>>,
-    _content: RpcContent,
+    session: &mut FlipperSession,
+    content: RpcContent,
 ) -> Result<RpcMessage, AppError> {
-    // TODO: integrate with serial port write/read
-    // For now, return an error indicating serial ProtoBus is not yet connected
-    Err(AppError::SerialError(
-        "ProtoBus serial integration pending".to_string(),
-    ))
+    let sequence_id = session.allocate_command_id();
+    let request = RpcMessage {
+        sequence_id,
+        content: Some(content),
+    };
+
+    session.send(&request.to_bytes())?;
+
+    // Bounded so a device that only ever emits unsolicited traffic cannot keep
+    // us here forever.
+    const MAX_SKIPPED: usize = 64;
+    for _ in 0..MAX_SKIPPED {
+        let frame = session.receive()?;
+        let message = RpcMessage::from_bytes(&frame)?;
+        if message.sequence_id == sequence_id {
+            return Ok(message);
+        }
+    }
+
+    Err(AppError::SerialError(format!(
+        "No response with sequence_id {} after {} messages",
+        sequence_id, MAX_SKIPPED
+    )))
 }
 
 /// Encode an RPC message to bytes (for sending over serial manually).
@@ -522,11 +542,11 @@ pub fn decode_rpc(data: &[u8]) -> Result<RpcMessage, AppError> {
 
 /// List files on the Flipper Zero.
 pub fn proto_list_dir(
-    conn: &Arc<Mutex<FlipperConnection>>,
+    session: &mut FlipperSession,
     path: &str,
 ) -> Result<Vec<FileInfoProto>, AppError> {
     let resp = rpc_command(
-        conn,
+        session,
         RpcContent::StorageListRequest {
             path: path.to_string(),
         },
@@ -540,12 +560,9 @@ pub fn proto_list_dir(
 }
 
 /// Read a file from the Flipper Zero.
-pub fn proto_read_file(
-    conn: &Arc<Mutex<FlipperConnection>>,
-    path: &str,
-) -> Result<Vec<u8>, AppError> {
+pub fn proto_read_file(session: &mut FlipperSession, path: &str) -> Result<Vec<u8>, AppError> {
     let resp = rpc_command(
-        conn,
+        session,
         RpcContent::StorageReadRequest {
             path: path.to_string(),
         },
@@ -560,12 +577,12 @@ pub fn proto_read_file(
 
 /// Write a file to the Flipper Zero.
 pub fn proto_write_file(
-    conn: &Arc<Mutex<FlipperConnection>>,
+    session: &mut FlipperSession,
     path: &str,
     data: &[u8],
 ) -> Result<(), AppError> {
     let resp = rpc_command(
-        conn,
+        session,
         RpcContent::StorageWriteRequest {
             path: path.to_string(),
             data: data.to_vec(),
@@ -580,9 +597,9 @@ pub fn proto_write_file(
 }
 
 /// Create a directory on the Flipper Zero.
-pub fn proto_mkdir(conn: &Arc<Mutex<FlipperConnection>>, path: &str) -> Result<(), AppError> {
+pub fn proto_mkdir(session: &mut FlipperSession, path: &str) -> Result<(), AppError> {
     let resp = rpc_command(
-        conn,
+        session,
         RpcContent::StorageMkdirRequest {
             path: path.to_string(),
         },
@@ -596,9 +613,9 @@ pub fn proto_mkdir(conn: &Arc<Mutex<FlipperConnection>>, path: &str) -> Result<(
 }
 
 /// Delete a file/directory on the Flipper Zero.
-pub fn proto_delete(conn: &Arc<Mutex<FlipperConnection>>, path: &str) -> Result<(), AppError> {
+pub fn proto_delete(session: &mut FlipperSession, path: &str) -> Result<(), AppError> {
     let resp = rpc_command(
-        conn,
+        session,
         RpcContent::StorageDeleteRequest {
             path: path.to_string(),
         },
@@ -613,9 +630,9 @@ pub fn proto_delete(conn: &Arc<Mutex<FlipperConnection>>, path: &str) -> Result<
 
 /// Get Flipper Zero device info.
 pub fn proto_device_info(
-    conn: &Arc<Mutex<FlipperConnection>>,
+    session: &mut FlipperSession,
 ) -> Result<(String, String, String), AppError> {
-    let resp = rpc_command(conn, RpcContent::DeviceInfoRequest)?;
+    let resp = rpc_command(session, RpcContent::DeviceInfoRequest)?;
     match resp.content {
         Some(RpcContent::DeviceInfoResponse {
             name,
@@ -629,9 +646,9 @@ pub fn proto_device_info(
 }
 
 /// Ping the Flipper Zero.
-pub fn proto_ping(conn: &Arc<Mutex<FlipperConnection>>, data: &[u8]) -> Result<Vec<u8>, AppError> {
+pub fn proto_ping(session: &mut FlipperSession, data: &[u8]) -> Result<Vec<u8>, AppError> {
     let resp = rpc_command(
-        conn,
+        session,
         RpcContent::PingRequest {
             data: data.to_vec(),
         },

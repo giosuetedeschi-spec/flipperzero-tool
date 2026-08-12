@@ -28,7 +28,13 @@
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png"
-    ]
+    ],
+    "android": {
+      "minSdkVersion": 24
+    },
+    "iOS": {
+      "minimumSystemVersion": "13.0"
+    }
   },
   "plugins": {
     "shell": {

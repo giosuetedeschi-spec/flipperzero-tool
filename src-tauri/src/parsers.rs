@@ -284,7 +284,7 @@ pub fn parse_nfc(raw: &str) -> Result<ParsedFile, AppError> {
             "Version" => {
                 version = v.parse().unwrap_or(0);
             }
-            "Device Type" | "DeviceType" => {
+            "Device type" | "Device Type" | "DeviceType" => {
                 device_type = v.clone();
             }
             "UID" => {
@@ -648,7 +648,7 @@ impl ParsedFile {
             match k.as_str() {
                 "Filetype" => filetype = v.clone(),
                 "Version" => version = v.parse().unwrap_or(0),
-                "Device Type" | "DeviceType" => device_type = v.clone(),
+                "Device type" | "Device Type" | "DeviceType" => device_type = v.clone(),
                 "UID" => uid = v.clone(),
                 "ATQA" => atqa = v.clone(),
                 "SAK" => {
@@ -673,5 +673,251 @@ impl ParsedFile {
             sectors,
             extra,
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LF RFID parser (.rfid files)
+// ---------------------------------------------------------------------------
+//
+// 125 kHz badges: the kind used by building entrances and company gates. The
+// payload is short -- these tags hold little more than an identifier.
+//
+// Example:
+//   Filetype: Flipper RFID key
+//   Version: 1
+//   Key type: EM4100
+//   Data: 12 34 56 78 90
+
+/// Parse a `.rfid` file into the loose field representation.
+pub fn parse_rfid(raw: &str) -> Result<ParsedFile, AppError> {
+    let kvs = parse_key_value(raw);
+    let mut fields = Vec::new();
+
+    for (k, v) in &kvs {
+        match k.as_str() {
+            "Filetype" => fields.push(Value::String(format!("filetype: {}", v))),
+            "Version" => fields.push(Value::String(format!("version: {}", v))),
+            // The Flipper writes "Key type"; some tools emit "Key_type".
+            "Key type" | "Key_type" | "KeyType" => {
+                fields.push(Value::String(format!("key_type: {}", v)))
+            }
+            "Data" => fields.push(Value::String(format!("data: {}", v))),
+            _ => fields.push(Value::String(format!("{}: {}", k, v))),
+        }
+    }
+
+    Ok(ParsedFile {
+        file_type: "rfid".to_string(),
+        fields,
+        raw_preview: preview(raw),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// iButton parser (.ibtn files)
+// ---------------------------------------------------------------------------
+//
+// 1-Wire contact keys -- the round metal keys used on intercoms.
+//
+// Example:
+//   Filetype: Flipper iButton key
+//   Version: 1
+//   Key type: Dallas
+//   Data: 01 02 03 04 05 06 07 08
+
+/// Parse an `.ibtn` file into the loose field representation.
+pub fn parse_ibtn(raw: &str) -> Result<ParsedFile, AppError> {
+    let kvs = parse_key_value(raw);
+    let mut fields = Vec::new();
+
+    for (k, v) in &kvs {
+        match k.as_str() {
+            "Filetype" => fields.push(Value::String(format!("filetype: {}", v))),
+            "Version" => fields.push(Value::String(format!("version: {}", v))),
+            "Key type" | "Key_type" | "KeyType" => {
+                fields.push(Value::String(format!("key_type: {}", v)))
+            }
+            "Data" => fields.push(Value::String(format!("data: {}", v))),
+            _ => fields.push(Value::String(format!("{}: {}", k, v))),
+        }
+    }
+
+    Ok(ParsedFile {
+        file_type: "ibtn".to_string(),
+        fields,
+        raw_preview: preview(raw),
+    })
+}
+
+/// A parsed `.rfid` file.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct RfidFile {
+    pub filetype: String,
+    pub version: u32,
+    /// Tag protocol, e.g. `EM4100`, `HIDProx`, `Indala26`.
+    pub key_type: String,
+    /// Identifier bytes as written in the file, space separated.
+    pub data: String,
+    pub extra: Vec<(String, String)>,
+}
+
+/// A parsed `.ibtn` file.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct IButtonFile {
+    pub filetype: String,
+    pub version: u32,
+    /// 1-Wire family, e.g. `Dallas`, `Cyfral`, `Metakom`.
+    pub key_type: String,
+    pub data: String,
+    pub extra: Vec<(String, String)>,
+}
+
+/// Shared shape of the two key-file formats.
+///
+/// `.rfid` and `.ibtn` are the same four fields over different radios, so they
+/// are parsed once rather than twice with the field names copied.
+fn parse_key_file(raw: &str) -> (String, u32, String, String, Vec<(String, String)>) {
+    let mut filetype = String::new();
+    let mut version = 0u32;
+    let mut key_type = String::new();
+    let mut data = String::new();
+    let mut extra = Vec::new();
+
+    for (k, v) in parse_key_value(raw) {
+        match k.as_str() {
+            "Filetype" => filetype = v,
+            "Version" => version = v.parse().unwrap_or(0),
+            "Key type" | "Key_type" | "KeyType" => key_type = v,
+            "Data" => data = v,
+            _ => extra.push((k, v)),
+        }
+    }
+
+    (filetype, version, key_type, data, extra)
+}
+
+/// Parse a `.rfid` file into a typed struct.
+pub fn parse_rfid_struct(raw: &str) -> Result<RfidFile, AppError> {
+    let (filetype, version, key_type, data, extra) = parse_key_file(raw);
+    Ok(RfidFile {
+        filetype,
+        version,
+        key_type,
+        data,
+        extra,
+    })
+}
+
+/// Parse an `.ibtn` file into a typed struct.
+pub fn parse_ibtn_struct(raw: &str) -> Result<IButtonFile, AppError> {
+    let (filetype, version, key_type, data, extra) = parse_key_file(raw);
+    Ok(IButtonFile {
+        filetype,
+        version,
+        key_type,
+        data,
+        extra,
+    })
+}
+
+#[cfg(test)]
+mod nfc_spelling_tests {
+    use super::*;
+
+    /// Real Flipper `.nfc` files write "Device type" with a lowercase t. The
+    /// parser once accepted only the capitalised spellings and dropped the
+    /// field silently, so every genuine file parsed with an empty device type.
+    #[test]
+    fn accepts_the_spelling_the_firmware_actually_writes() {
+        let raw = "Filetype: Flipper NFC device\nVersion: 4\nDevice type: UID\nUID: 04 1E 23\n";
+        let parsed = ParsedFile::parse_nfc_struct(raw).unwrap();
+        assert_eq!(parsed.device_type, "UID");
+        assert_eq!(parsed.uid, "04 1E 23");
+    }
+
+    #[test]
+    fn still_accepts_the_capitalised_variants() {
+        for spelling in ["Device Type", "DeviceType"] {
+            let raw = format!("{}: Mifare Classic\nUID: AA BB\n", spelling);
+            let parsed = ParsedFile::parse_nfc_struct(&raw).unwrap();
+            assert_eq!(parsed.device_type, "Mifare Classic", "{}", spelling);
+        }
+    }
+}
+
+#[cfg(test)]
+mod key_file_tests {
+    use super::*;
+
+    const RFID: &str =
+        "Filetype: Flipper RFID key\nVersion: 1\nKey type: EM4100\nData: 12 34 56 78 90\n";
+    const IBTN: &str = "Filetype: Flipper iButton key\nVersion: 1\nKey type: Dallas\nData: 01 02 03 04 05 06 07 08\n";
+
+    #[test]
+    fn parses_an_rfid_badge() {
+        let parsed = parse_rfid_struct(RFID).unwrap();
+        assert_eq!(parsed.filetype, "Flipper RFID key");
+        assert_eq!(parsed.version, 1);
+        assert_eq!(parsed.key_type, "EM4100");
+        assert_eq!(parsed.data, "12 34 56 78 90");
+    }
+
+    #[test]
+    fn parses_an_ibutton_key() {
+        let parsed = parse_ibtn_struct(IBTN).unwrap();
+        assert_eq!(parsed.filetype, "Flipper iButton key");
+        assert_eq!(parsed.key_type, "Dallas");
+        assert_eq!(parsed.data, "01 02 03 04 05 06 07 08");
+    }
+
+    #[test]
+    fn accepts_the_underscore_spelling_of_key_type() {
+        // Third-party tools write Key_type; the Flipper writes "Key type".
+        let parsed = parse_rfid_struct("Key_type: HIDProx\nData: AA BB\n").unwrap();
+        assert_eq!(parsed.key_type, "HIDProx");
+    }
+
+    #[test]
+    fn unknown_lines_are_kept_rather_than_dropped() {
+        let parsed = parse_ibtn_struct("Key type: Cyfral\nNote: front door\n").unwrap();
+        assert_eq!(
+            parsed.extra,
+            vec![("Note".to_string(), "front door".to_string())]
+        );
+    }
+
+    #[test]
+    fn empty_input_yields_empty_fields_not_an_error() {
+        let parsed = parse_rfid_struct("").unwrap();
+        assert_eq!(parsed.version, 0);
+        assert!(parsed.key_type.is_empty());
+        assert!(parsed.data.is_empty());
+    }
+
+    #[test]
+    fn a_malformed_version_does_not_abort_the_parse() {
+        let parsed = parse_rfid_struct("Version: not-a-number\nKey type: EM4100\n").unwrap();
+        assert_eq!(parsed.version, 0);
+        assert_eq!(parsed.key_type, "EM4100", "later fields still parse");
+    }
+
+    #[test]
+    fn loose_parsers_tag_their_file_type() {
+        assert_eq!(parse_rfid(RFID).unwrap().file_type, "rfid");
+        assert_eq!(parse_ibtn(IBTN).unwrap().file_type, "ibtn");
+    }
+
+    #[test]
+    fn loose_parsers_keep_every_line() {
+        assert_eq!(parse_rfid(RFID).unwrap().fields.len(), 4);
+        assert_eq!(parse_ibtn(IBTN).unwrap().fields.len(), 4);
+    }
+
+    #[test]
+    fn comments_and_blank_lines_are_ignored() {
+        let parsed = parse_rfid_struct("# a comment\n\nKey type: Indala26\n").unwrap();
+        assert_eq!(parsed.key_type, "Indala26");
+        assert!(parsed.extra.is_empty());
     }
 }

@@ -18,13 +18,19 @@ tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
-serialport = "4"
 tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 env_logger = "0.11"
 dirs = "5"
 open = "5"
 lazy_static = "1"
+
+# `serialport` binds host USB stacks (libudev on Linux, IOKit on macOS, Win32)
+# and cannot build for iOS or Android. Mobile talks to the Flipper over BLE and
+# Android USB-OTG instead, so the crate is desktop-only and every call site of
+# it lives behind `#[cfg(desktop)]`.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+serialport = "4"
 
 [features]
 default = ["custom-protocol"]
