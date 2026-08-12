@@ -4,3 +4,6 @@
 //! prompt, which cannot work over BLE and could not carry binary payloads.
 
 pub mod framing;
+pub mod session;
+
+pub use session::FlipperSession;
