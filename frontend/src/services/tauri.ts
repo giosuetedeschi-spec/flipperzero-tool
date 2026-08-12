@@ -383,3 +383,44 @@ export async function reverseEngineerAnalyzeFile(path: string): Promise<Analysis
   try { return await invoke<AnalysisResult>("reverse_engineer_analyze_file", { path }); }
   catch (error) { throw new Error(getErrorMessage(error as AppError | string), { cause: error }); }
 }
+
+// ---------------------------------------------------------------------------
+// Signal Radar
+// ---------------------------------------------------------------------------
+
+import type { ChipSlug, Signal } from "../types/signals";
+
+export interface Sighting {
+  seen_at: number;
+  rssi_dbm: number | null;
+  location: { latitude: number; longitude: number } | null;
+}
+
+export function signalsListByChip(chip: ChipSlug): Promise<Signal[]> {
+  return invoke("signals_list_by_chip", { chip });
+}
+
+/** Distinct signals per chip, as `[slug, count]` pairs. */
+export function signalsCountsByChip(): Promise<[ChipSlug, number][]> {
+  return invoke("signals_counts_by_chip");
+}
+
+export function signalsGet(signalId: string): Promise<Signal | null> {
+  return invoke("signals_get", { signalId });
+}
+
+export function signalsSightings(signalId: string): Promise<Sighting[]> {
+  return invoke("signals_sightings", { signalId });
+}
+
+export function signalsRecord(signal: Signal): Promise<boolean> {
+  return invoke("signals_record", { signal });
+}
+
+export function signalsDelete(signalId: string): Promise<boolean> {
+  return invoke("signals_delete", { signalId });
+}
+
+export function signalsClear(): Promise<void> {
+  return invoke("signals_clear");
+}

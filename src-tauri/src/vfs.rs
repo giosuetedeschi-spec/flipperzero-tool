@@ -66,6 +66,10 @@ fn init_schema(conn: &Connection) -> Result<(), AppError> {
     )
     .map_err(AppError::from)?;
 
+    // The Signal Radar tables live in the same database file rather than a
+    // second one, so a single connection serves both the file cache and the
+    // signal history.
+    crate::signals::store::init_schema(conn)?;
     Ok(())
 }
 
@@ -73,10 +77,10 @@ fn init_schema(conn: &Connection) -> Result<(), AppError> {
 // Connection helper (thread-safe via Arc<Mutex<>>)
 // ---------------------------------------------------------------------------
 
-type DbState = Arc<StdMutex<Connection>>;
+pub(crate) type DbState = Arc<StdMutex<Connection>>;
 
 /// Get or create the database connection.
-fn get_conn(app: &AppHandle) -> Result<DbState, AppError> {
+pub(crate) fn get_conn(app: &AppHandle) -> Result<DbState, AppError> {
     // Try to get existing state
     if let Some(state) = app.try_state::<DbState>() {
         return Ok(state.inner().clone());

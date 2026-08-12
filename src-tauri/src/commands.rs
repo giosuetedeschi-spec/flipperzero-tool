@@ -714,3 +714,91 @@ pub fn template_create(base_path: String, name: String, ext: String) -> Result<S
 
     Ok(file_path.to_string_lossy().to_string())
 }
+
+// ---------------------------------------------------------------------------
+// Signal Radar
+// ---------------------------------------------------------------------------
+//
+// The Radar reads through these rather than reaching into the store directly,
+// so the SQLite connection stays owned by `vfs` and there is one database file
+// for both the file cache and the signal history.
+
+use super::signals::store::Sighting;
+use super::signals::{Chip, Signal};
+
+/// Resolve a chip slug coming from the frontend.
+///
+/// An unknown slug means the caller is out of step with the model, so it is
+/// reported rather than quietly coerced to a default chip.
+fn parse_chip(slug: &str) -> Result<Chip, AppError> {
+    Chip::from_slug(slug).ok_or_else(|| AppError::General(format!("Unknown chip: {}", slug)))
+}
+
+/// Run `f` against the shared database connection.
+fn with_signal_db<T>(
+    app: &tauri::AppHandle,
+    f: impl FnOnce(&rusqlite::Connection) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let state = super::vfs::get_conn(app)?;
+    let conn = state
+        .lock()
+        .map_err(|_| AppError::DbError("Database mutex poisoned".to_string()))?;
+    f(&conn)
+}
+
+#[tauri::command]
+pub fn signals_list_by_chip(app: tauri::AppHandle, chip: String) -> Result<Vec<Signal>, AppError> {
+    let chip = parse_chip(&chip)?;
+    with_signal_db(&app, |conn| {
+        super::signals::store::list_by_chip_conn(conn, chip)
+    })
+}
+
+/// Distinct signals per chip, for the badges on the Radar diagram.
+#[tauri::command]
+pub fn signals_counts_by_chip(app: tauri::AppHandle) -> Result<Vec<(String, u32)>, AppError> {
+    with_signal_db(&app, |conn| {
+        Ok(super::signals::store::counts_by_chip_conn(conn)?
+            .into_iter()
+            .map(|(chip, count)| (chip.slug().to_string(), count))
+            .collect())
+    })
+}
+
+#[tauri::command]
+pub fn signals_get(app: tauri::AppHandle, signal_id: String) -> Result<Option<Signal>, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::get_conn(conn, &signal_id)
+    })
+}
+
+/// Every recorded encounter with one signal, for the timeline and RSSI history.
+#[tauri::command]
+pub fn signals_sightings(
+    app: tauri::AppHandle,
+    signal_id: String,
+) -> Result<Vec<Sighting>, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::sightings_conn(conn, &signal_id)
+    })
+}
+
+/// Record a detection. Returns true when this signal had never been seen before.
+#[tauri::command]
+pub fn signals_record(app: tauri::AppHandle, signal: Signal) -> Result<bool, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::record_conn(conn, &signal)
+    })
+}
+
+#[tauri::command]
+pub fn signals_delete(app: tauri::AppHandle, signal_id: String) -> Result<bool, AppError> {
+    with_signal_db(&app, |conn| {
+        super::signals::store::delete_conn(conn, &signal_id)
+    })
+}
+
+#[tauri::command]
+pub fn signals_clear(app: tauri::AppHandle) -> Result<(), AppError> {
+    with_signal_db(&app, super::signals::store::clear_conn)
+}

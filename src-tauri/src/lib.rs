@@ -92,6 +92,14 @@ pub fn run() {
             commands::parser_parse_ibtn,
             commands::parser_parse_rfid_struct,
             commands::parser_parse_ibtn_struct,
+            // Signal Radar
+            commands::signals_list_by_chip,
+            commands::signals_counts_by_chip,
+            commands::signals_get,
+            commands::signals_sightings,
+            commands::signals_record,
+            commands::signals_delete,
+            commands::signals_clear,
             // Templates
             commands::template_get,
             commands::template_list,
