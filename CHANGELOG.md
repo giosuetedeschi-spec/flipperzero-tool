@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Mobile port, phase P0 (foundations). `serialport` is now a desktop-only dependency, declared under
+  a `cfg(not(android/ios))` target table, and every call site of it sits behind `#[cfg(desktop)]`
+  with a mobile counterpart that fails with a clear "use the BLE transport" message instead of
+  failing to compile. `run()` gained `#[cfg_attr(mobile, tauri::mobile_entry_point)]`
+- `serial::base64_decode`, the missing counterpart to `base64_encode`. Without it binary payloads
+  could be sent to the device but never read back, which blocks `.fap` deployment from a phone
+- New `android-check` CI job: type-checks the crate for `aarch64-linux-android` via `cargo-ndk` and
+  asserts `serialport` stays out of the Android dependency tree. The NDK is not available in every
+  development environment, so this guard lives in CI
+
+### Changed
+- `run()` no longer calls `std::process::exit` on a fatal error; it panics instead. Self-terminating
+  is not a legal way to leave a mobile app and iOS reports it as a crash
 - `docs/MOBILE-PORT-PLAN.md`: architecture and 8-phase delivery plan for the iOS/Android port and the
   new Signal Radar view, plus `docs/AGENT-PROMPT-MOBILE-PORT.md` with the implementation prompt
 
@@ -18,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   semver-compatible. Unblocks the `security-scan` CI job, which was failing on every branch
 
 ### Fixed
+- `serial_upload` rejected any file that was not valid UTF-8, and `serial_download` forced downloads
+  through a UTF-8 round-trip. Both now move bytes, so binary files on the SD card survive the trip
+- Six commands defined in `commands.rs` were never registered in the `invoke_handler` list
+  (`parser_parse_{sub,ir,nfc}_struct`, `template_{get,list,create}`). The Sub-GHz/IR/NFC detail views
+  already invoked them, so those calls failed at runtime
 - parsers.rs: changed return type from `Result<ParsedFile, String>` to `Result<ParsedFile, AppError>` for consistency
 - App.tsx: removed hardcoded Windows path `MOCK_ROOT`, now uses localStorage for root directory
 - Backend no longer fails to compile: resolved the `serial.rs`/`serial/mod.rs` module conflict,

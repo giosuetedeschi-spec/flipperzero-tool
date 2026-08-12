@@ -265,11 +265,11 @@ pub async fn serial_upload(
     local_path: String,
     remote_path: String,
 ) -> Result<bool, AppError> {
-    // Read local file and write to Flipper
+    // Upload the bytes as they are. Rejecting non-UTF-8 here made it impossible
+    // to push any binary payload (`.fap`, `.nfc` dumps, firmware) to the device,
+    // and `write_file` already base64-encodes whatever it is given.
     let data = std::fs::read(&local_path).map_err(AppError::from)?;
-    let text = String::from_utf8(data)
-        .map_err(|e| AppError::ParseError(format!("Not valid UTF-8: {}", e)))?;
-    super::serial::write_file_text(&state, &remote_path, &text)
+    super::serial::write_file(&state, &remote_path, &data)
 }
 
 #[tauri::command]
@@ -278,10 +278,12 @@ pub async fn serial_download(
     remote_path: String,
     local_path: String,
 ) -> Result<bool, AppError> {
-    let text = super::serial::read_file_text(&state, &remote_path)?;
+    // Download as bytes, not text, for the same reason `serial_upload` does:
+    // forcing UTF-8 corrupts or rejects every binary file on the SD card.
+    let data = super::serial::read_file(&state, &remote_path)?;
     // Safe save: write to temp then rename
     let temp = std::path::Path::new(&local_path).with_extension("tmp");
-    std::fs::write(&temp, text.as_bytes()).map_err(AppError::from)?;
+    std::fs::write(&temp, &data).map_err(AppError::from)?;
     std::fs::rename(&temp, &local_path).map_err(AppError::from)?;
     Ok(true)
 }

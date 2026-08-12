@@ -15,7 +15,7 @@ pub use parsers::{ParsedFile, parse_ir, parse_nfc, parse_sub};
 pub use serial::new_state;
 pub use serial::{FlipperConnection, FlipperState, PortInfo};
 pub use serial::{autodetect_connect, delete_path, find_flipper, mkdir_path, stat_path};
-pub use serial::{base64_encode, encode_varint, parse_list_output, read_varint};
+pub use serial::{base64_decode, base64_encode, encode_varint, parse_list_output, read_varint};
 pub use serial::{connect, disconnect, is_connected, list_ports};
 pub use serial::{list_dir, read_file_text, write_file_text};
 
@@ -29,6 +29,11 @@ pub use proto_bus::{
 /// Builds and runs the Tauri application. The sole entry point used by
 /// `main.rs`, so the binary and the `flipperzero_tool_lib` crate never
 /// drift into two different module/handler trees again.
+///
+/// On iOS/Android there is no `main.rs` to call this: the platform launches the
+/// app through the generated native shell, which is what `mobile_entry_point`
+/// wires up.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
 
@@ -76,6 +81,14 @@ pub fn run() {
             commands::parser_parse_sub,
             commands::parser_parse_ir,
             commands::parser_parse_nfc,
+            // Typed parser variants, called by the Sub-GHz/IR/NFC detail views
+            commands::parser_parse_sub_struct,
+            commands::parser_parse_ir_struct,
+            commands::parser_parse_nfc_struct,
+            // Templates
+            commands::template_get,
+            commands::template_list,
+            commands::template_create,
             // uFBT
             commands::ufbt_new_project,
             commands::ufbt_compile,
@@ -98,8 +111,8 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .unwrap_or_else(|e| {
-            eprintln!("Fatal error: {}", e);
-            std::process::exit(1);
-        });
+        // `process::exit` skips destructors and is not a legal way to leave a
+        // mobile app: iOS treats a self-terminating process as a crash. Panic
+        // instead, which unwinds and surfaces the real cause on every platform.
+        .unwrap_or_else(|e| panic!("Fatal error while running the application: {}", e));
 }
