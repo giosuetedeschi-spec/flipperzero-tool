@@ -2,6 +2,7 @@
 
 pub mod actions;
 pub mod fap_protocol;
+pub mod firmware;
 pub mod model;
 pub mod store;
 

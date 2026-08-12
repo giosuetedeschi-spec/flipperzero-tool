@@ -136,6 +136,15 @@ export const en: Record<keyof typeof it, string> = {
   "action.compare.detail": "Put this capture next to another one to see what differs.",
   "action.export": "Export",
   "action.export.detail": "Save the capture to your phone or share it.",
+  "firmware.official": "Official firmware",
+  "firmware.momentum": "Momentum (custom firmware)",
+  "firmware.unleashed": "Unleashed (custom firmware)",
+  "firmware.roguemaster": "RogueMaster (custom firmware)",
+  "firmware.unknown": "Unrecognised firmware",
+  "action.needs_fap": "The Signal Radar app must be on the Flipper",
+  "action.tx_not_implemented": "The on-device app cannot transmit yet",
+  "action.frequency_blocked": "This firmware will not transmit on this frequency",
+  "action.compare.pick_second": "Choose a second capture to compare against",
 
   "legal.title": "Before transmitting",
   "legal.body":

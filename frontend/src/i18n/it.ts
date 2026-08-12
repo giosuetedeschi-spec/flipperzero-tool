@@ -143,6 +143,15 @@ export const it = {
   "action.compare.detail": "Mette a confronto questa cattura con un'altra per vedere cosa cambia.",
   "action.export": "Esporta",
   "action.export.detail": "Salva la cattura sul telefono o condividila.",
+  "firmware.official": "Firmware ufficiale",
+  "firmware.momentum": "Momentum (firmware custom)",
+  "firmware.unleashed": "Unleashed (firmware custom)",
+  "firmware.roguemaster": "RogueMaster (firmware custom)",
+  "firmware.unknown": "Firmware non riconosciuto",
+  "action.needs_fap": "Serve l'app Signal Radar sul Flipper",
+  "action.tx_not_implemented": "L'app sul dispositivo non sa ancora trasmettere",
+  "action.frequency_blocked": "Questo firmware non trasmette su questa frequenza",
+  "action.compare.pick_second": "Scegli una seconda cattura da confrontare",
 
   // The legal gate. Deliberately plain and non-negotiable in tone.
   "legal.title": "Prima di trasmettere",

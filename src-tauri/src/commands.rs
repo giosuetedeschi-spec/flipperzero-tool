@@ -821,6 +821,6 @@ pub fn signals_perform_action(
     // No FAP deployment path exists yet, so nothing can transmit. Saying so
     // through the outcome keeps the claim in one place rather than scattering
     // optimistic assumptions through the UI.
-    let capabilities = super::signals::actions::DeviceCapabilities::NONE;
-    super::signals::actions::perform(&signal, action, capabilities)
+    let capabilities = super::signals::actions::DeviceCapabilities::none();
+    super::signals::actions::perform(&signal, action, &capabilities)
 }

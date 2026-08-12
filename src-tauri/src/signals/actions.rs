@@ -10,6 +10,7 @@
 //! Radar FAP: until it is deployed and reports the capability, those return an
 //! error naming what is missing.
 
+use super::firmware::FirmwareCapabilities;
 use super::model::{ActionId, Signal, SignalKind};
 use crate::errors::AppError;
 use crate::reverse_engineer::{AnalysisResult, analyze};
@@ -172,16 +173,22 @@ pub fn capture_path(signal: &Signal) -> String {
 ///
 /// Kept as an explicit input rather than read from a global, so the caller has
 /// to decide what it knows about the device instead of assuming.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DeviceCapabilities {
     /// A Signal Radar FAP is running and reported a compatible version.
     pub fap_available: bool,
+    /// What the connected firmware permits.
+    pub firmware: FirmwareCapabilities,
 }
 
 impl DeviceCapabilities {
-    pub const NONE: Self = Self {
-        fap_available: false,
-    };
+    /// Nothing is known about the device yet.
+    pub fn none() -> Self {
+        Self {
+            fap_available: false,
+            firmware: FirmwareCapabilities::unknown(),
+        }
+    }
 }
 
 /// Perform an action that needs nothing beyond the signal itself.
@@ -192,7 +199,7 @@ impl DeviceCapabilities {
 pub fn perform(
     signal: &Signal,
     action: ActionId,
-    capabilities: DeviceCapabilities,
+    capabilities: &DeviceCapabilities,
 ) -> Result<ActionOutcome, AppError> {
     // Guard first: an action the signal does not offer should never arrive here,
     // and if it does, something upstream is out of step with the model.
@@ -222,6 +229,22 @@ pub fn perform(
         }),
 
         ActionId::Replay | ActionId::Emulate => {
+            // Refuse an out-of-band frequency before anything else. Stock
+            // firmware silently declines it, which surfaces as a replay that
+            // appears to work and changes nothing -- the most confusing failure
+            // the app can produce.
+            if let SignalKind::SubGhz { frequency_hz, .. } = &signal.kind
+                && !capabilities.firmware.can_transmit_on(*frequency_hz)
+            {
+                return Ok(ActionOutcome::Unavailable {
+                    reason_key: "action.frequency_blocked".to_string(),
+                    detail: format!(
+                        "This firmware will not transmit on {:.2} MHz",
+                        *frequency_hz as f64 / 1_000_000.0
+                    ),
+                });
+            }
+
             if !capabilities.fap_available {
                 return Ok(ActionOutcome::Unavailable {
                     reason_key: "action.needs_fap".to_string(),
@@ -273,7 +296,7 @@ mod tests {
         let outcome = perform(
             &subghz(Some(false)),
             ActionId::Analyze,
-            DeviceCapabilities::NONE,
+            &DeviceCapabilities::none(),
         )
         .expect("analysis needs no device");
         match outcome {
@@ -289,7 +312,7 @@ mod tests {
         let outcome = perform(
             &subghz(Some(false)),
             ActionId::Save,
-            DeviceCapabilities::NONE,
+            &DeviceCapabilities::none(),
         )
         .unwrap();
         match outcome {
@@ -331,7 +354,7 @@ mod tests {
         let outcome = perform(
             &subghz(Some(false)),
             ActionId::Export,
-            DeviceCapabilities::NONE,
+            &DeviceCapabilities::none(),
         )
         .unwrap();
         match outcome {
@@ -349,7 +372,7 @@ mod tests {
     fn an_exported_capture_can_be_read_back_by_our_own_parser() {
         // The strongest available check that the rendering is real: round-trip
         // it through the parser the app uses for files off the SD card.
-        let outcome = perform(&tag(), ActionId::Export, DeviceCapabilities::NONE).unwrap();
+        let outcome = perform(&tag(), ActionId::Export, &DeviceCapabilities::none()).unwrap();
         let ActionOutcome::Exported { contents, .. } = outcome else {
             panic!("expected an export");
         };
@@ -369,7 +392,7 @@ mod tests {
             0,
         );
         let ActionOutcome::Exported { contents, .. } =
-            perform(&badge, ActionId::Export, DeviceCapabilities::NONE).unwrap()
+            perform(&badge, ActionId::Export, &DeviceCapabilities::none()).unwrap()
         else {
             panic!("expected an export");
         };
@@ -386,7 +409,7 @@ mod tests {
         let outcome = perform(
             &subghz(Some(false)),
             ActionId::Replay,
-            DeviceCapabilities::NONE,
+            &DeviceCapabilities::none(),
         )
         .unwrap();
         match outcome {
@@ -402,8 +425,9 @@ mod tests {
         let outcome = perform(
             &subghz(Some(false)),
             ActionId::Replay,
-            DeviceCapabilities {
+            &DeviceCapabilities {
                 fap_available: true,
+                firmware: FirmwareCapabilities::from_version("Unleashed"),
             },
         )
         .unwrap();
@@ -422,8 +446,9 @@ mod tests {
         let err = perform(
             &subghz(Some(true)),
             ActionId::Replay,
-            DeviceCapabilities {
+            &DeviceCapabilities {
                 fap_available: true,
+                firmware: FirmwareCapabilities::from_version("Unleashed"),
             },
         )
         .unwrap_err();
@@ -439,12 +464,130 @@ mod tests {
             },
             0,
         );
-        assert!(perform(&device, ActionId::Emulate, DeviceCapabilities::NONE).is_err());
+        assert!(perform(&device, ActionId::Emulate, &DeviceCapabilities::none()).is_err());
     }
 
     #[test]
     fn comparison_asks_for_the_second_capture() {
-        let outcome = perform(&subghz(None), ActionId::Compare, DeviceCapabilities::NONE).unwrap();
+        let outcome = perform(
+            &subghz(None),
+            ActionId::Compare,
+            &DeviceCapabilities::none(),
+        )
+        .unwrap();
         assert!(matches!(outcome, ActionOutcome::Unavailable { .. }));
+    }
+}
+
+#[cfg(test)]
+mod firmware_gate_tests {
+    use super::*;
+    use crate::signals::firmware::FirmwareCapabilities;
+    use crate::signals::model::Signal;
+
+    fn remote_at(frequency_hz: u32) -> Signal {
+        Signal::new(
+            SignalKind::SubGhz {
+                frequency_hz,
+                preset: None,
+                protocol: Some("Princeton".to_string()),
+                rolling_code: Some(false),
+            },
+            0,
+        )
+    }
+
+    fn device(fap: bool, version: &str) -> DeviceCapabilities {
+        DeviceCapabilities {
+            fap_available: fap,
+            firmware: FirmwareCapabilities::from_version(version),
+        }
+    }
+
+    #[test]
+    fn stock_firmware_refuses_an_out_of_band_replay_before_trying() {
+        // The device would decline silently, surfacing as a replay that seems to
+        // work and changes nothing -- the most confusing failure available.
+        let outcome = perform(
+            &remote_at(500_000_000),
+            ActionId::Replay,
+            &device(true, "1.0.1 official"),
+        )
+        .unwrap();
+
+        match outcome {
+            ActionOutcome::Unavailable { reason_key, detail } => {
+                assert_eq!(reason_key, "action.frequency_blocked");
+                assert!(detail.contains("500.00 MHz"), "got {}", detail);
+            }
+            other => panic!("expected a refusal, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn stock_firmware_allows_a_replay_inside_its_bands() {
+        let outcome = perform(
+            &remote_at(433_920_000),
+            ActionId::Replay,
+            &device(true, "1.0.1 official"),
+        )
+        .unwrap();
+        // Reaches the FAP check rather than the frequency one.
+        match outcome {
+            ActionOutcome::Unavailable { reason_key, .. } => {
+                assert_eq!(reason_key, "action.tx_not_implemented");
+            }
+            other => panic!("expected the FAP limitation, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn unlocked_firmware_gets_past_the_frequency_gate() {
+        let outcome = perform(
+            &remote_at(500_000_000),
+            ActionId::Replay,
+            &device(true, "Unleashed 1.1"),
+        )
+        .unwrap();
+        match outcome {
+            ActionOutcome::Unavailable { reason_key, .. } => {
+                assert_eq!(reason_key, "action.tx_not_implemented");
+            }
+            other => panic!("expected the FAP limitation, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn the_frequency_gate_does_not_touch_non_radio_actions() {
+        // Saving or analysing an out-of-band capture is always fine; only
+        // transmitting is restricted.
+        for action in [ActionId::Save, ActionId::Analyze, ActionId::Export] {
+            assert!(
+                perform(&remote_at(500_000_000), action, &device(false, "official")).is_ok(),
+                "{:?} must not be blocked by a transmit rule",
+                action
+            );
+        }
+    }
+
+    #[test]
+    fn an_emulated_tag_is_not_frequency_gated() {
+        // NFC and iButton carry no Sub-GHz frequency; the gate must not invent
+        // one and refuse them.
+        let tag = Signal::new(
+            SignalKind::Nfc {
+                technology: "ISO14443-3A".to_string(),
+                uid: "04:1E".to_string(),
+                atqa: None,
+                sak: None,
+            },
+            0,
+        );
+        match perform(&tag, ActionId::Emulate, &device(true, "official")).unwrap() {
+            ActionOutcome::Unavailable { reason_key, .. } => {
+                assert_eq!(reason_key, "action.tx_not_implemented");
+            }
+            other => panic!("expected the FAP limitation, got {:?}", other),
+        }
     }
 }
