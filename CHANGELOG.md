@@ -16,7 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   could be sent to the device but never read back, which blocks `.fap` deployment from a phone
 - New `android-check` CI job: type-checks the crate for `aarch64-linux-android` via `cargo-ndk` and
   asserts `serialport` stays out of the Android dependency tree. The NDK is not available in every
-  development environment, so this guard lives in CI
+  development environment, so this guard lives in CI. It is green, which settles an open question
+  from the port plan: `rusqlite`'s bundled SQLite does cross-compile against the NDK
+- Mobile port, phase P1 (transport and RPC). `transport::Transport` is the seam every link shares:
+  USB CDC, BLE and Android USB-OTG move bytes differently but carry the same protobuf stream.
+  `transport::usb_cdc` implements it for desktop and holds the port open for the transport's whole
+  life, including the `start_rpc_session` handshake that switches the device out of CLI mode.
+  `transport::loopback` is an in-memory link that reproduces BLE's small MTU and partial reads
+- `rpc::framing` implements protobuf length-delimited framing, tolerating frames split across
+  arbitrary read boundaries -- including a varint length prefix straddling two BLE notifications
+- `rpc::FlipperSession` owns a connection for its lifetime and allocates RPC sequence ids
 
 ### Changed
 - `run()` no longer calls `std::process::exit` on a fatal error; it panics instead. Self-terminating
@@ -31,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   semver-compatible. Unblocks the `security-scan` CI job, which was failing on every branch
 
 ### Fixed
+- `proto_bus::rpc_command` was a stub that always returned "ProtoBus serial integration pending",
+  leaving the tested protobuf codec with nothing underneath it and every `proto_*` helper dead. It
+  now runs over a `FlipperSession`, matching replies by `sequence_id` so unsolicited device messages
+  (and Signal Radar FAP telemetry) cannot be mistaken for a response and desynchronise the stream
 - `serial_upload` rejected any file that was not valid UTF-8, and `serial_download` forced downloads
   through a UTF-8 round-trip. Both now move bytes, so binary files on the SD card survive the trip
 - Six commands defined in `commands.rs` were never registered in the `invoke_handler` list

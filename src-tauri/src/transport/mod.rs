@@ -16,6 +16,8 @@ use super::errors::AppError;
 use serde::{Deserialize, Serialize};
 
 pub mod loopback;
+#[cfg(desktop)]
+pub mod usb_cdc;
 
 /// Which physical link a [`Transport`] is running over.
 ///
