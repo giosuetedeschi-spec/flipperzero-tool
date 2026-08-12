@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChipSlug, Signal } from "../types/signals";
 import { isExternalModule } from "../types/signals";
 import { signalsCountsByChip, signalsListByChip } from "../services/tauri";
@@ -65,21 +65,25 @@ export function useSignals(
   const [error, setError] = useState<string | null>(null);
 
   // Held in a ref so changing which chip is open does not tear down and rebuild
-  // the polling timers on every tap.
+  // the polling timers on every tap. Synced in an effect rather than during
+  // render, since a render may be discarded and must stay side-effect free.
   const focusedRef = useRef<ChipSlug | null>(focusedChip);
-  focusedRef.current = focusedChip;
+  useEffect(() => {
+    focusedRef.current = focusedChip;
+  }, [focusedChip]);
 
-  const loadDemo = useCallback(() => {
-    const grouped: Record<string, Signal[]> = {};
+  // Mock data is derived, never stored. Pushing it through state would mean
+  // writing state from inside an effect, and the demo set is a constant -- there
+  // is nothing to keep in sync.
+  const demo = useMemo(() => {
+    const signalsByChip: Record<string, Signal[]> = {};
     for (const signal of DEMO_SIGNALS) {
-      (grouped[signal.chip] ??= []).push(signal);
+      (signalsByChip[signal.chip] ??= []).push(signal);
     }
-    const demoCounts = Object.fromEntries(
-      Object.entries(grouped).map(([chip, list]) => [chip, list.length]),
+    const counts = Object.fromEntries(
+      Object.entries(signalsByChip).map(([chip, list]) => [chip, list.length]),
     );
-    setSignalsByChip(grouped);
-    setCounts(demoCounts);
-    setError(null);
+    return { signalsByChip, counts };
   }, []);
 
   const refreshCounts = useCallback(async () => {
@@ -104,21 +108,20 @@ export function useSignals(
   }, []);
 
   const refresh = useCallback(() => {
-    if (mockMode) {
-      loadDemo();
-      return;
-    }
+    // Nothing to refresh in mock mode: the demo set is derived, not fetched.
+    if (mockMode) return;
     void refreshCounts();
     void refreshFocused();
-  }, [mockMode, loadDemo, refreshCounts, refreshFocused]);
+  }, [mockMode, refreshCounts, refreshFocused]);
 
   useEffect(() => {
-    if (mockMode) {
-      loadDemo();
-      return;
-    }
-    if (!connected) return;
+    if (mockMode || !connected) return;
 
+    // The lint rule traces setState through these async callbacks, but the
+    // writes happen after an await, not synchronously in the effect. Fetching
+    // once on connect is the point of the effect; without it the Radar would
+    // stay blank until the first interval fires.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount pattern
     void refreshCounts();
     void refreshFocused();
     const fast = setInterval(() => void refreshFocused(), FOREGROUND_INTERVAL_MS);
@@ -127,12 +130,20 @@ export function useSignals(
       clearInterval(fast);
       clearInterval(slow);
     };
-  }, [connected, mockMode, loadDemo, refreshCounts, refreshFocused]);
+  }, [connected, mockMode, refreshCounts, refreshFocused]);
+
+  const effectiveCounts = mockMode ? demo.counts : counts;
+  const effectiveSignals = mockMode ? demo.signalsByChip : signalsByChip;
 
   const chips: ChipStatus[] = [...BUILT_IN_CHIPS, ...EXTERNAL_CHIPS].map((chip) => {
-    const count = counts[chip] ?? 0;
+    const count = effectiveCounts[chip] ?? 0;
     return { chip, count, availability: availabilityFor(chip, transportIsBle, count) };
   });
 
-  return { chips, signalsByChip, error, refresh };
+  return {
+    chips,
+    signalsByChip: effectiveSignals,
+    error: mockMode ? null : error,
+    refresh,
+  };
 }
