@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — mobile port
+- Signal Radar: interactive Flipper diagram, per-chip drill-down, plain-language explanations for
+  every chip, signal and action, and a first-run explainer. Bilingual IT/EN throughout
+- `transport::Transport` with USB CDC, BLE and TCP implementations, plus `rpc::FlipperSession` and
+  length-delimited protobuf framing. `proto_bus::rpc_command` is implemented rather than stubbed
+- `signals`: unified `Signal` model, SQLite history with sightings and optional geotagging, action
+  execution, FAP telemetry protocol decoder, and firmware family detection
+- `.rfid` and `.ibtn` parsers, the last two Flipper formats the app could not read
+- A mock Flipper (`cargo run --bin flipper_mock`) speaking the real RPC protocol over TCP, with
+  end-to-end tests driving the whole stack against it
+- `flipper-fap/signal_radar`: the on-device scanning app, and the native BLE bridge for both platforms
+- CI cross-compiles for `aarch64-linux-android` and `aarch64-apple-ios`
+
+### Fixed — found while porting
+- The NFC parser rejected `Device type`, the spelling the firmware actually writes, so every genuine
+  `.nfc` file parsed with an empty device type
+- The `frontend-typecheck` CI job checked nothing: `npx tsc --noEmit` against a root tsconfig with
+  `"files": []` and only project references. It now runs `tsc -b --force`
+- Binary files could not round-trip: `base64_decode` did not exist, and `serial_upload` rejected any
+  non-UTF-8 input
+- Six commands the UI already called were never registered in the `invoke_handler` list
+- Polling continued while the app was off screen, draining both batteries
+
+### Known limitations
+- The native project shells are not generated; `tauri android init` needs an SDK and iOS needs macOS
+- The BLE bridge and the FAP are unverified until run on a device; see `docs/HARDWARE-CHECKLIST.md`
+- Transmitting is not implemented and says so rather than failing silently
+- The protobuf schema is still hand-written; replacing it needs the upstream repository
+
 ### Added
 - Mobile port, phase P0 (foundations). `serialport` is now a desktop-only dependency, declared under
   a `cfg(not(android/ios))` target table, and every call site of it sits behind `#[cfg(desktop)]`
