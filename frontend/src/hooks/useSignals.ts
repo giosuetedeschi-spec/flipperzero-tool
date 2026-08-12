@@ -4,6 +4,7 @@ import { isExternalModule } from "../types/signals";
 import { signalsCountsByChip, signalsListByChip } from "../services/tauri";
 import type { ChipAvailability, ChipStatus } from "../components/radar/FlipperSchematic";
 import { DEMO_SIGNALS } from "../mock/demoSignals";
+import { useDocumentVisible } from "./useDocumentVisible";
 
 /**
  * Feeds the Radar.
@@ -25,6 +26,8 @@ export interface SignalsState {
   signalsByChip: Record<string, Signal[]>;
   error: string | null;
   refresh: () => void;
+  /** False while polling is paused because the app is off screen. */
+  polling: boolean;
 }
 
 const BUILT_IN_CHIPS: ChipSlug[] = [
@@ -63,6 +66,7 @@ export function useSignals(
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [signalsByChip, setSignalsByChip] = useState<Record<string, Signal[]>>({});
   const [error, setError] = useState<string | null>(null);
+  const visible = useDocumentVisible();
 
   // Held in a ref so changing which chip is open does not tear down and rebuild
   // the polling timers on every tap. Synced in an effect rather than during
@@ -115,7 +119,9 @@ export function useSignals(
   }, [mockMode, refreshCounts, refreshFocused]);
 
   useEffect(() => {
-    if (mockMode || !connected) return;
+    // Nobody is looking, so nothing needs refreshing. Leaving the timers running
+    // would drain the phone and the Flipper for data no one can see.
+    if (mockMode || !connected || !visible) return;
 
     // The lint rule traces setState through these async callbacks, but the
     // writes happen after an await, not synchronously in the effect. Fetching
@@ -130,7 +136,7 @@ export function useSignals(
       clearInterval(fast);
       clearInterval(slow);
     };
-  }, [connected, mockMode, refreshCounts, refreshFocused]);
+  }, [connected, mockMode, visible, refreshCounts, refreshFocused]);
 
   const effectiveCounts = mockMode ? demo.counts : counts;
   const effectiveSignals = mockMode ? demo.signalsByChip : signalsByChip;
@@ -145,5 +151,6 @@ export function useSignals(
     signalsByChip: effectiveSignals,
     error: mockMode ? null : error,
     refresh,
+    polling: connected && !mockMode && visible,
   };
 }

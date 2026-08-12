@@ -1,5 +1,6 @@
 import { useT } from "../i18n/useT";
 import { SUPPORTED_LOCALES, type Locale } from "../i18n";
+import { useGeolocation } from "../hooks/useGeolocation";
 
 /**
  * Settings: language, and the mock-device toggle.
@@ -21,6 +22,7 @@ interface Props {
 
 export default function SettingsView({ mockMode, onMockModeChange }: Props) {
   const { t, locale, setLocale } = useT();
+  const geo = useGeolocation();
 
   return (
     <div className="flex flex-col gap-6 overflow-auto p-4" data-testid="settings-view">
@@ -50,6 +52,33 @@ export default function SettingsView({ mockMode, onMockModeChange }: Props) {
             </button>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-gray-300">{t("settings.geotagging")}</h2>
+        <button
+          type="button"
+          onClick={() => geo.setEnabled(!geo.enabled)}
+          aria-pressed={geo.enabled}
+          data-testid="geotagging-toggle"
+          className={[
+            "rounded-2xl px-4 py-2 text-sm font-medium transition",
+            "focus:outline-none focus:ring-2 focus:ring-white/70",
+            geo.enabled
+              ? "border border-emerald-500 bg-emerald-600 text-white"
+              : "border border-gray-600 bg-gray-800 text-gray-200 hover:border-gray-500",
+          ].join(" ")}
+        >
+          {geo.enabled ? t("settings.geotagging.on") : t("settings.geotagging.off")}
+        </button>
+        <p className="mt-2 text-xs text-gray-500">{t("settings.geotagging.hint")}</p>
+        {/* Say why there is no position rather than leaving the toggle looking
+            broken -- indoors, where most tag reads happen, GPS routinely fails. */}
+        {geo.enabled && geo.unavailableReason && (
+          <p data-testid="geotagging-status" className="mt-1 text-xs text-amber-400">
+            {t(`settings.geotagging.${geo.unavailableReason}` as never)}
+          </p>
+        )}
       </section>
 
       <section>
