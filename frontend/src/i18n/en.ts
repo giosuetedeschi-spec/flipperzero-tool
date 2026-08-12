@@ -43,6 +43,15 @@ export const en: Record<keyof typeof it, string> = {
 
   "radar.title": "What the Flipper can see",
   "radar.subtitle": "Tap a chip to see what it is picking up",
+  "onboarding.what.title": "This is what your Flipper can hear",
+  "onboarding.what.body": "The Flipper has several radios, each sensitive to a different kind of signal: gate remotes, contactless cards, badges, TV remotes. The diagram shows them all -- tap whichever one interests you.",
+  "onboarding.counts.title": "The numbers count distinct things",
+  "onboarding.counts.body": "The number on a chip is how many *different* signals it has seen, not how many times. Walk past the same gate ten times and it stays one signal, with its sighting count going up.",
+  "onboarding.limits.title": "What you can do, and what you cannot",
+  "onboarding.limits.body": "Watching and analysing is always fine. Re-transmitting or emulating a signal is not the same thing: only do it on devices you own or have explicit permission to test. In most countries, doing it to someone else's equipment is illegal.",
+  "onboarding.next": "Next",
+  "onboarding.skip": "Skip",
+  "onboarding.start": "Get started",
   "radar.empty": "No signals detected yet",
   "radar.empty.hint":
     "Bring the Flipper near a remote, a card or a reader. Signals show up here as soon as they are picked up.",

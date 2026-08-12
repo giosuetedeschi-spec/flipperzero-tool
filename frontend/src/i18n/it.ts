@@ -44,6 +44,15 @@ export const it = {
 
   "radar.title": "Cosa vede il Flipper",
   "radar.subtitle": "Tocca un chip per vedere cosa sta captando",
+  "onboarding.what.title": "Questo è ciò che il Flipper sente",
+  "onboarding.what.body": "Il Flipper ha diverse radio, ognuna sensibile a un tipo di segnale diverso: telecomandi di cancelli, carte contactless, badge, telecomandi TV. Lo schema mostra tutte le radio: tocca quella che ti incuriosisce.",
+  "onboarding.counts.title": "I numeri contano cose diverse",
+  "onboarding.counts.body": "Il numero su un chip dice quanti segnali *diversi* ha visto, non quante volte. Se passi dieci volte davanti allo stesso cancello resta un segnale solo, con il contatore degli avvistamenti che sale.",
+  "onboarding.limits.title": "Cosa puoi fare, e cosa no",
+  "onboarding.limits.body": "Osservare e analizzare è sempre lecito. Ritrasmettere o emulare un segnale è un'altra cosa: fallo solo su dispositivi tuoi o per cui hai un permesso esplicito. In gran parte dei paesi, Italia compresa, farlo su apparecchi altrui è illegale.",
+  "onboarding.next": "Avanti",
+  "onboarding.skip": "Salta",
+  "onboarding.start": "Iniziamo",
   "radar.empty": "Nessun segnale rilevato per ora",
   "radar.empty.hint":
     "Avvicina il Flipper a un telecomando, una carta o un lettore. I segnali compaiono qui appena vengono captati.",

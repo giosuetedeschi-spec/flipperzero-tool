@@ -1,4 +1,4 @@
-import { describe, expect, it as test, vi } from "vitest";
+import { beforeEach, describe, expect, it as test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -8,6 +8,8 @@ import ChipSheet from "./ChipSheet";
 import SignalCard from "./SignalCard";
 import { rssiToPercent } from "./rssi";
 import TransmitGate from "./TransmitGate";
+import RadarOnboarding from "./RadarOnboarding";
+import { hasSeenOnboarding } from "./onboardingState";
 import type { Signal } from "../../types/signals";
 
 function withI18n(children: ReactNode, locale: "it" | "en" = "en") {
@@ -237,5 +239,53 @@ describe("TransmitGate", () => {
 
     await userEvent.click(screen.getByTestId("transmit-cancel"));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+});
+
+describe("RadarOnboarding", () => {
+  beforeEach(() => localStorage.clear());
+
+  test("explains what the Radar is before the user meets the diagram", () => {
+    render(withI18n(<RadarOnboarding onDismiss={() => {}} />));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("This is what your Flipper can hear")).toBeInTheDocument();
+  });
+
+  test("walks through every step and ends on the legal one", async () => {
+    render(withI18n(<RadarOnboarding onDismiss={() => {}} />));
+
+    await userEvent.click(screen.getByTestId("onboarding-next"));
+    expect(screen.getByText("The numbers count distinct things")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("onboarding-next"));
+    // The legal limits are stated before the user ever meets a transmit button.
+    expect(screen.getByText(/illegal/)).toBeInTheDocument();
+  });
+
+  test("finishing marks it seen so it never reappears", async () => {
+    const onDismiss = vi.fn();
+    render(withI18n(<RadarOnboarding onDismiss={onDismiss} />));
+
+    await userEvent.click(screen.getByTestId("onboarding-next"));
+    await userEvent.click(screen.getByTestId("onboarding-next"));
+    await userEvent.click(screen.getByTestId("onboarding-next"));
+
+    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(hasSeenOnboarding()).toBe(true);
+  });
+
+  test("skipping is as final as finishing", async () => {
+    // An explainer that comes back after being dismissed is an irritation.
+    const onDismiss = vi.fn();
+    render(withI18n(<RadarOnboarding onDismiss={onDismiss} />));
+
+    await userEvent.click(screen.getByTestId("onboarding-skip"));
+    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(hasSeenOnboarding()).toBe(true);
+  });
+
+  test("translates", () => {
+    render(withI18n(<RadarOnboarding onDismiss={() => {}} />, "it"));
+    expect(screen.getByText("Questo è ciò che il Flipper sente")).toBeInTheDocument();
   });
 });

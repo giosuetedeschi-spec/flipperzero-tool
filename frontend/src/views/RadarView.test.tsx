@@ -17,7 +17,12 @@ function withI18n(children: ReactNode, locale: "it" | "en" = "en") {
 }
 
 describe("RadarView", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // These tests are about the Radar, not the first-run tour; mark it seen so
+    // the overlay is not in the way of every query.
+    localStorage.setItem("flipper_radar_onboarding_seen", "1");
+  });
 
   test("tells the user to connect when there is nothing to listen to", () => {
     render(withI18n(<RadarView connected={false} mockMode={false} />));

@@ -4,6 +4,8 @@ import { requiresTransmission } from "../types/signals";
 import FlipperSchematic from "../components/radar/FlipperSchematic";
 import ChipSheet from "../components/radar/ChipSheet";
 import TransmitGate from "../components/radar/TransmitGate";
+import RadarOnboarding from "../components/radar/RadarOnboarding";
+import { hasSeenOnboarding } from "../components/radar/onboardingState";
 import { useSignals } from "../hooks/useSignals";
 import { useT } from "../i18n/useT";
 
@@ -32,6 +34,7 @@ export default function RadarView({
   const { t } = useT();
   const [selectedChip, setSelectedChip] = useState<ChipSlug | null>(null);
   const [pending, setPending] = useState<{ signal: Signal; action: ActionId } | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => !hasSeenOnboarding());
 
   const { chips, signalsByChip, error } = useSignals(
     connected,
@@ -91,6 +94,8 @@ export default function RadarView({
           onAction={handleAction}
         />
       )}
+
+      {showOnboarding && <RadarOnboarding onDismiss={() => setShowOnboarding(false)} />}
 
       {pending && (
         <TransmitGate
