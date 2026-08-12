@@ -602,6 +602,29 @@ pub fn parser_parse_nfc_struct(data: String) -> Result<super::parsers::NfcFile, 
     super::parsers::ParsedFile::parse_nfc_struct(&data)
 }
 
+// LF RFID and iButton: the two Flipper key formats the app previously could not
+// read at all.
+
+#[tauri::command]
+pub fn parser_parse_rfid(data: String) -> Result<ParsedFile, AppError> {
+    super::parsers::parse_rfid(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_ibtn(data: String) -> Result<ParsedFile, AppError> {
+    super::parsers::parse_ibtn(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_rfid_struct(data: String) -> Result<super::parsers::RfidFile, AppError> {
+    super::parsers::parse_rfid_struct(&data)
+}
+
+#[tauri::command]
+pub fn parser_parse_ibtn_struct(data: String) -> Result<super::parsers::IButtonFile, AppError> {
+    super::parsers::parse_ibtn_struct(&data)
+}
+
 // ---------------------------------------------------------------------------
 // Template file creation (P3)
 // ---------------------------------------------------------------------------

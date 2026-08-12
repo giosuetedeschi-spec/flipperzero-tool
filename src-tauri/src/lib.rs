@@ -14,7 +14,7 @@ pub mod vfs;
 pub use commands::{copy_file, create_file_from_template, delete_file, find_files};
 pub use commands::{get_file_content, list_directory, move_file, rename_file, write_file_content};
 pub use errors::AppError;
-pub use parsers::{ParsedFile, parse_ir, parse_nfc, parse_sub};
+pub use parsers::{ParsedFile, parse_ibtn, parse_ir, parse_nfc, parse_rfid, parse_sub};
 pub use serial::new_state;
 pub use serial::{FlipperConnection, FlipperState, PortInfo};
 pub use serial::{autodetect_connect, delete_path, find_flipper, mkdir_path, stat_path};
@@ -88,6 +88,10 @@ pub fn run() {
             commands::parser_parse_sub_struct,
             commands::parser_parse_ir_struct,
             commands::parser_parse_nfc_struct,
+            commands::parser_parse_rfid,
+            commands::parser_parse_ibtn,
+            commands::parser_parse_rfid_struct,
+            commands::parser_parse_ibtn_struct,
             // Templates
             commands::template_get,
             commands::template_list,
