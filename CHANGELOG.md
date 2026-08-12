@@ -26,6 +26,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `rpc::framing` implements protobuf length-delimited framing, tolerating frames split across
   arbitrary read boundaries -- including a varint length prefix straddling two BLE notifications
 - `rpc::FlipperSession` owns a connection for its lifetime and allocates RPC sequence ids
+- Mobile port, phase P5 (Signal Radar). `signals::model` normalises every radio into one `Signal`,
+  identified by a fingerprint over the fields that actually identify it -- excluding RSSI, time and
+  location, which describe a sighting rather than the signal, so repeat encounters increment a count
+  instead of piling up duplicates. `signals::store` keeps `signals` and `signal_sightings` as
+  separate tables so the timeline, RSSI history and geotagging survive
+- Signal Radar UI: `FlipperSchematic` (chip hotspots as real keyboard-reachable buttons, laid out
+  where the radios physically sit), `ChipSheet`, `SignalCard` and `TransmitGate`
+- Bilingual IT/EN interface via a flat key catalogue with interpolation and plural forms. The
+  English catalogue is typed against the Italian one, so a key added to one and missing from the
+  other fails the build rather than showing a raw key to a user
+- Mobile port, phase P7: `.rfid` (125 kHz badges) and `.ibtn` (iButton contact keys) parsers, both
+  loose and typed, with Tauri commands registered. These were the only two Flipper formats the app
+  could not read at all
 
 ### Changed
 - `run()` no longer calls `std::process::exit` on a fatal error; it panics instead. Self-terminating
